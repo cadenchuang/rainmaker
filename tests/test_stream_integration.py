@@ -5,6 +5,8 @@ from contextlib import asynccontextmanager
 import pytest
 from websockets.asyncio.server import serve
 from websockets.asyncio.client import connect
+from recording import Recorder
+import sqlite3
 from market_stream import MarketStream
 from test_market_stream import snap, delta
 
@@ -68,13 +70,15 @@ async def wait_for_sync(stream, ws, *, timeout=1):
     await asyncio.wait_for(poll(), timeout)
 
 
+@pytest.mark.parametrize('recording', [False, True])
 @pytest.mark.parametrize('abrupt', [False, True])
-def test_local_recovery_and_reconnect(abrupt):
+def test_local_recovery_and_reconnect(abrupt, recording, tmp_path):
     async def scenario():
         finished = asyncio.Event()
         sessions = []
         sleeps = []
-        stream = MarketStream(['A', 'B'])
+        recorder = Recorder(tmp_path / 'events.db') if recording else None
+        stream = MarketStream(['A', 'B'], recorder=recorder)
 
         async def send(ws, event):
             await ws.send(json.dumps(event))
@@ -132,6 +136,13 @@ def test_local_recovery_and_reconnect(abrupt):
                 with pytest.raises(asyncio.CancelledError):
                     await task
                 assert all(row[2] is None for row in stream.view())
+                if recorder is not None:
+                    health = await recorder.close(3)
+                    assert health.clean_shutdown and health.coverage == 'INCOMPLETE'
+                    with sqlite3.connect(tmp_path / 'events.db') as db:
+                        generations = db.execute("SELECT DISTINCT generation FROM journal WHERE kind='ws_received' ORDER BY generation").fetchall()
+                        assert generations == [(1,), (2,)]
+                        assert db.execute("SELECT count(*) FROM journal WHERE kind='connection_closed'").fetchone()[0] == 2
     asyncio.run(scenario())
 
 
