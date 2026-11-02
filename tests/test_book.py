@@ -46,3 +46,20 @@ def test_requires_snapshot_and_empty_snapshot():
         b.apply_delta({})
     b.replace_snapshot({'yes_dollars_fp': [], 'no_dollars_fp': []})
     assert b.quote() == (None, None, None, None)
+
+
+@pytest.mark.parametrize('row', [
+    '12', {'1': '2', '0': '3'}, [], ['.4'], ['.4', '2', '3'],
+    ('.4', '2'), None, 12, [True, '2'], ['.4', False],
+    [None, '2'], ['.4', {}], [['.4'], '2'], ['.4', 0.5],
+])
+def test_malformed_snapshot_rows_preserve_levels_but_invalidate(row):
+    b = Book()
+    b.replace_snapshot(snapshot())
+    old = b.yes.copy(), b.no.copy()
+    with pytest.raises(BookError):
+        b.replace_snapshot({'yes_dollars_fp': [], 'no_dollars_fp': [row]})
+    assert (b.yes, b.no) == old
+    assert not b.valid
+    with pytest.raises(BookError):
+        b.quote()

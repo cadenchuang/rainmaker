@@ -189,3 +189,72 @@ def test_missing_identity_and_malformed_market():
         await s.handle(w, event)
         assert all(not m.book.valid for m in s.markets.values())
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize('code', [10, 25])
+@pytest.mark.parametrize('during_recovery', [False, True])
+def test_established_subscription_errors_rebuild_all_books(code, during_recovery):
+    async def scenario():
+        s, w = await ready()
+        subscribe_id = w.sent[0]['id']
+        if during_recovery:
+            await s.handle(w, delta(3, amount='-100'))
+            assert s.markets['B'].book.valid
+        await s.handle(w, {'type': 'error', 'id': subscribe_id, 'msg': {'code': code}})
+        assert all(row[2] is None for row in s.view())
+        assert s.phase == 'UNSUBSCRIBING'
+        unsubscribe_id = w.sent[-1]['id']
+        assert w.sent[-1]['cmd'] == 'unsubscribe'
+        seq = 4 if during_recovery else 3
+        await s.handle(w, {'type': 'unsubscribed', 'id': unsubscribe_id, 'sid': 7, 'seq': seq})
+        new_id = w.sent[-1]['id']
+        await s.handle(w, {'type': 'subscribed', 'id': new_id,
+                           'msg': {'channel': 'orderbook_delta', 'sid': 8}})
+        # Errors associated with the retired subscription must not poison the new one.
+        await s.handle(w, {'type': 'error', 'id': subscribe_id, 'msg': {'code': code}})
+        await s.handle(w, snap(1, sid=8))
+        await s.handle(w, snap(2, 'B', sid=8))
+        assert all(row[2] is not None for row in s.view())
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize('cancel', [False, True])
+def test_quotes_invalid_before_blocked_connection_exit(cancel):
+    async def scenario():
+        s, w = await ready()
+        active = asyncio.Event()
+        closing = asyncio.Event()
+        release = asyncio.Event()
+
+        class Connection:
+            async def __aenter__(self):
+                return w
+            async def __aexit__(self, *args):
+                closing.set()
+                await release.wait()
+
+        async def session(ws):
+            active.set()
+            if cancel:
+                await asyncio.Event().wait()
+            raise Reconnect('Synthetic session failure')
+
+        s.session = session
+        task = asyncio.create_task(s.run(Connection))
+        try:
+            await asyncio.wait_for(active.wait(), 1)
+            if cancel:
+                task.cancel()
+            await asyncio.wait_for(closing.wait(), 1)
+            assert not task.done()
+            assert s.connection_status != 'CONNECTED'
+            assert all(row[2] is None for row in s.view())
+            for market in s.markets.values():
+                with pytest.raises(ValueError):
+                    market.book.quote()
+        finally:
+            task.cancel()
+            release.set()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+    asyncio.run(scenario())

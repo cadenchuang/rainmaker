@@ -42,8 +42,10 @@ class Book:
                 levels = {}
                 if not isinstance(payload[side], list):
                     raise BookError("Invalid levels")
-                for p, q in payload[side]:
-                    p, q = price(p), number(q)
+                for row in payload[side]:
+                    if not isinstance(row, list) or len(row) != 2:
+                        raise BookError("Expected a two-element price/quantity array")
+                    p, q = price(row[0]), number(row[1])
                     if q < 0 or p in levels:
                         raise BookError("Negative quantity or duplicate level")
                     levels[p] = q

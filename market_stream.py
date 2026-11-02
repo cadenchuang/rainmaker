@@ -50,6 +50,7 @@ class MarketStream:
         self.last_received_at = None
         self.last_error = ""
         self.snapshot_id = None
+        self.active_subscribe_id = None
         self.rebuilt = False
 
     def invalidate(self, tickers, reason):
@@ -68,6 +69,7 @@ class MarketStream:
         )
 
     async def subscribe(self, ws):
+        self.active_subscribe_id = None
         self.sid, self.last_seq = None, None
         self.phase = "SUBSCRIBING"
         self.awaiting = set(self.markets)
@@ -134,13 +136,18 @@ class MarketStream:
             if payload.get("channel") != "orderbook_delta" or type(payload.get("sid")) is not int:
                 raise Reconnect("Invalid subscription acknowledgment")
             self.sid, self.last_seq = payload["sid"], None
+            self.active_subscribe_id = self.pending[0]
             self.pending = None
             self.phase = "ACTIVE"
             self.snapshot_deadline = self.clock() + self.timeout
             return
         if kind == "error":
             request_id = event.get("id")
-            if request_id is not None and request_id not in (self.snapshot_id, self.pending[0] if self.pending else None):
+            # Subscription failures can refer to the original subscribe command
+            # long after its acknowledgment. Pending commands alone are insufficient.
+            identities = (self.active_subscribe_id, self.snapshot_id,
+                          self.pending[0] if self.pending else None)
+            if request_id is not None and request_id not in identities:
                 return
             code = payload.get("code")
             if code in (1, 2, 3, 4, 5, 8, 9, 11, 12, 14, 15):
@@ -222,9 +229,18 @@ class MarketStream:
     async def run(self, connector):
         delay = 1
         while True:
+            stable = False
             try:
                 async with connector() as ws:
-                    await self.session(ws)
+                    try:
+                        await self.session(ws)
+                    finally:
+                        # No await before invalidation: __aexit__ may block while
+                        # completing the closing handshake, including on cancellation.
+                        stable = (self.live_since is not None and
+                                  self.clock() - self.live_since >= self.stable_after)
+                        self.invalidate(self.markets, "Connection closing")
+                        self.connection_status = self.phase = "CLOSING"
             except InvalidHandshake as exc:
                 status = getattr(getattr(exc, "response", None), "status_code", None)
                 if status in (401, 403):
@@ -233,13 +249,14 @@ class MarketStream:
             except (Reconnect, ConnectionClosed, OSError, TimeoutError) as exc:
                 self.last_error = str(exc) if isinstance(exc, Reconnect) else type(exc).__name__
             finally:
-                stable = self.live_since is not None and self.clock() - self.live_since >= self.stable_after
                 self.invalidate(self.markets, "Connection closed")
                 self.connection_status = self.phase = "DISCONNECTED"
                 self.pending = None
                 self.awaiting.clear()
                 self.snapshot_deadline = None
                 self.sid, self.last_seq = None, None
+                self.active_subscribe_id = None
+                self.snapshot_id = None
             if stable:
                 delay = 1
             await self.sleep(self.jitter(delay * 0.8, delay))
