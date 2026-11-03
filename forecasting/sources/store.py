@@ -90,14 +90,14 @@ class SourceStore:
                 (receipt_id, reason, receipt_id, reason))
 
     def candidate_envelope(self, receipt_id, *, published_at=None, revision=0, supersedes_id=None,
-                           quality='VERIFIED_OFFICIAL', source_kind='OFFICIAL_RESULTS'):
+                           quality='VERIFIED_OFFICIAL', source_kind='OFFICIAL_RESULTS', origin='REAL'):
         """Construct without publishing; accepted bundles validate before commit."""
         row = self.db.execute('SELECT ordinal,source_id,object_id,url,received_at,sha256 FROM source_receipts WHERE receipt_id=?', (receipt_id,)).fetchone()
         if row is None:
             raise ValueError('Missing durable receipt')
         order, source, obj, url, at, digest = row
         return EvidenceEnvelope(evidence_id=f'receipt:{receipt_id}', source_id=source,
-            source_object_id=obj, source_url=url, source_kind=source_kind, origin='REAL',
+            source_object_id=obj, source_url=url, source_kind=source_kind, origin=origin,
             published_at=published_at, received_at=datetime.fromisoformat(at), receipt_order=order,
             raw_payload=ArtifactRef(uri=f'sha256:{digest}', sha256=digest), quality=quality,
             revision=revision, supersedes_id=supersedes_id)
@@ -120,7 +120,7 @@ class SourceStore:
         receipt_id = envelope.evidence_id.removeprefix('receipt:')
         expected = self.candidate_envelope(receipt_id, published_at=envelope.published_at,
             revision=envelope.revision, supersedes_id=envelope.supersedes_id,
-            quality=envelope.quality, source_kind=envelope.source_kind)
+            quality=envelope.quality, source_kind=envelope.source_kind, origin=envelope.origin)
         if envelope != expected:
             raise ValueError('Envelope does not match retained receipt')
         with self.db:
