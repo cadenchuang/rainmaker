@@ -184,3 +184,14 @@ def revised_race(previous):
     return replace(previous, revision=previous.revision + 1, previous_definition_hash=content_id(previous),
         definition_evidence=evidence(f'{previous.state}-roster-revision-1', 'OFFICIAL_ROSTER', 10, T0 + timedelta(hours=1)),
         candidates=(old, *previous.candidates[1:], replacement))
+
+
+def real_counting_observation(observation):
+    """REAL-enum branch for validator tests ONLY, not an authenticated/historical feed.
+
+    Invented values and fixture bytes stay test-only; the enclosing prior/forecast
+    remains SYNTHETIC. This exercises VERIFIED_OFFICIAL and REJECTED transitions.
+    """
+    return replace(observation, evidence=replace(observation.evidence,
+        source_id='test-only:REAL-provenance-branch', source_url='fixture://REAL-enum-validator-test',
+        origin='REAL', quality='VERIFIED_OFFICIAL'))

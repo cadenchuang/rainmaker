@@ -426,12 +426,16 @@ class CountingObservation(Contract):
             require(self.reporting_status != 'COMPLETE', 'An increment is not a completed total')
 
 
-def validate_count(race: RaceDefinition, observation: CountingObservation) -> None:
+def _validate_count_structure(race: RaceDefinition, observation: CountingObservation) -> None:
     require(observation.race_id == race.race_id and observation.race_definition == race.ref, 'Wrong counting race revision')
     require(observation.candidate_ids == tuple(c.candidate_id for c in race.candidates), 'Wrong candidate order')
     coverage_cells(race, observation.coverage)
-    require(observation.evidence.source_kind == 'OFFICIAL_RESULTS' and observation.evidence.quality in
-            ('VERIFIED_OFFICIAL', 'SYNTHETIC'), 'Official result provenance required')
+    require(observation.evidence.source_kind == 'OFFICIAL_RESULTS', 'Official result provenance required')
+
+
+def validate_count(race: RaceDefinition, observation: CountingObservation) -> None:
+    _validate_count_structure(race, observation)
+    require(observation.evidence.quality in ('VERIFIED_OFFICIAL', 'SYNTHETIC'), 'Official result provenance required')
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -711,12 +715,19 @@ class MaterializedCount(Contract):
         require(self.reporting_status != 'COMPLETE' or all(v is not None for v in self.votes), 'Missing complete counts')
 
 
-def materialize_counts(race: RaceDefinition, observations: tuple[CountingObservation, ...]) -> tuple[MaterializedCount, ...]:
-    """Pure source bookkeeping, NOT a forecast. None + known remains None."""
-    seen, latest, totals = {}, {}, {}
+def _materialize_count_history(race: RaceDefinition, observations: tuple[CountingObservation, ...],
+                               applicable_evidence_ids: frozenset[str] | None = None
+                               ) -> tuple[tuple[MaterializedCount, ...], dict[str, tuple[str, ...]]]:
+    """Audit rows plus numerical base edges; chronology witnesses never fill output None."""
+    seen, latest, totals, numerical_bases = {}, {}, {}, {}
+    known_timestamps, known_values = {}, {}
+    quantity_fields = tuple(f.name for f in fields(VoteQuantities) if f.name != 'schema_version')
+    candidate_count = len(race.candidates)
     previous_order = None
     for obs in observations:
-        validate_count(race, obs)
+        _validate_count_structure(race, obs)
+        require(obs.evidence.quality in ('VERIFIED_OFFICIAL', 'SYNTHETIC', 'REJECTED'),
+                'Official result provenance required')
         order = (*obs.evidence.receipt_key, obs.observation_id)
         require(previous_order is None or order > previous_order, 'Backwards/duplicate observation receipt order')
         previous_order = order
@@ -725,28 +736,50 @@ def materialize_counts(race: RaceDefinition, observations: tuple[CountingObserva
         previous = latest.get(stream)
         if previous is not None:
             require(obs.source_sequence > previous.source_sequence, 'Old/repeated source sequence')
-            require(obs.source_as_of is None or previous.source_as_of is None or obs.source_as_of >= previous.source_as_of, 'Old source snapshot')
+        if obs.source_as_of is not None:
+            require(stream not in known_timestamps or obs.source_as_of >= known_timestamps[stream],
+                    'Old source snapshot')
+            known_timestamps[stream] = obs.source_as_of
         if obs.semantics != 'CUMULATIVE':
-            require(previous is not None and obs.base_observation_id == previous.observation_id, 'Base must be latest in same coverage/source')
+            require(previous is not None and obs.base_observation_id == previous.observation_id,
+                    'Base must be latest in same coverage/source')
         if obs.semantics == 'INCREMENTAL':
             base = totals[obs.base_observation_id]
             add = lambda a, b: None if a is None or b is None else a + b
             votes = tuple(add(a, b) for a, b in zip(base.votes, obs.votes))
-            quantities = VoteQuantities(**{f.name: add(getattr(base.quantities, f.name), getattr(obs.quantities, f.name))
-                                         for f in fields(VoteQuantities) if f.name != 'schema_version'})
+            quantities = VoteQuantities(**{name: add(getattr(base.quantities, name), getattr(obs.quantities, name))
+                                         for name in quantity_fields})
+            numerical_bases[obs.observation_id] = (obs.base_observation_id,)
         else:
             votes, quantities = obs.votes, obs.quantities
-            if previous is not None and obs.semantics == 'CUMULATIVE':
-                base = totals[previous.observation_id]
-                require(all(a is None or b is None or b >= a for a, b in zip(base.votes, votes)), 'Decrease requires explicit CORRECTION')
-                require(all(getattr(base.quantities, f.name) is None or getattr(quantities, f.name) is None or
-                            getattr(quantities, f.name) >= getattr(base.quantities, f.name)
-                            for f in fields(VoteQuantities) if f.name != 'schema_version'), 'Quantity decrease requires CORRECTION')
+            # A correction's base is chronology, not a numerical input to its replacement totals.
+            numerical_bases[obs.observation_id] = ()
+        values = (*votes, *(getattr(quantities, name) for name in quantity_fields))
+        witness = known_values.get(stream, (None,) * len(values))
+        if obs.semantics == 'CUMULATIVE':
+            require(all(a is None or b is None or b >= a for a, b in zip(witness[:candidate_count], votes)),
+                    'Decrease requires explicit CORRECTION')
+            require(all(a is None or b is None or b >= a for a, b in
+                        zip(witness[candidate_count:], values[candidate_count:])),
+                    'Quantity decrease requires CORRECTION')
+        if obs.semantics == 'CORRECTION':
+            # Inactive/rejected corrections cannot authorize a later cumulative decrease.
+            if obs.evidence.quality != 'REJECTED' and (applicable_evidence_ids is None or
+                                                      obs.evidence.evidence_id in applicable_evidence_ids):
+                known_values[stream] = tuple(old if new is None else new for old, new in zip(witness, values))
+        else:
+            known_values[stream] = tuple(old if new is None else new if old is None else max(old, new)
+                                         for old, new in zip(witness, values))
         totals[obs.observation_id] = MaterializedCount(observation_id=obs.observation_id, coverage=obs.coverage,
             candidate_ids=obs.candidate_ids, votes=votes, quantities=quantities,
             reporting_status=obs.reporting_status, completeness=obs.completeness)
         latest[stream], seen[obs.observation_id] = obs, obs
-    return tuple(totals[o.observation_id] for o in observations)
+    return tuple(totals[o.observation_id] for o in observations), numerical_bases
+
+
+def materialize_counts(race: RaceDefinition, observations: tuple[CountingObservation, ...]) -> tuple[MaterializedCount, ...]:
+    """Historical bookkeeping, NOT active eligibility. CountingState validates selection/ancestry."""
+    return _materialize_count_history(race, observations)[0]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -800,7 +833,8 @@ class CountingState(Contract):
         require(race.ref == self.partition.race_definition == self.materialized_counts.race_definition, 'Count partition definition mismatch')
         registry = {e.evidence_id: e for e in self.evidence.catalog}
         require(all(registry.get(o.evidence.evidence_id) == o.evidence for o in self.observations), 'Counting evidence not in catalog')
-        rows = materialize_counts(race, self.observations)
+        rows, numerical_bases = _materialize_count_history(
+            race, self.observations, frozenset(self.evidence.selected_ids))
         by_id = {o.observation_id: o for o in self.observations}
         selected = self.partition.selected_observation_ids
         excluded = {e.observation_id: e for e in self.partition.excluded}
@@ -812,6 +846,17 @@ class CountingState(Contract):
             obs = by_id[oid]
             require(latest[obs.coverage, obs.evidence.source_id] == oid, 'Selected stale observation')
             require(obs.evidence.evidence_id in self.evidence.selected_ids, 'Selected superseded source revision')
+        pending, consumed = list(selected), set()
+        while pending:
+            oid = pending.pop()
+            if oid in consumed:
+                continue
+            consumed.add(oid)
+            dependency = by_id[oid]
+            require(dependency.evidence.evidence_id in self.evidence.selected_ids,
+                    f'Inapplicable numerical dependency: {oid}')
+            validate_count(race, dependency)
+            pending.extend(numerical_bases[oid])
         for oid, exclusion in excluded.items():
             obs = by_id[oid]
             require(exclusion.reason != 'SUPERSEDED' or latest[obs.coverage, obs.evidence.source_id] != oid

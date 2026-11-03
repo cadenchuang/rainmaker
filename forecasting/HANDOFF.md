@@ -5,6 +5,11 @@ values, validators, hashing/serialization helpers, and deterministic source-coun
 bookkeeping. They implement no forecasts, adapters, network access, persistence,
 trading policy, approval gates or execution. No existing ledger is changed.
 
+The count-validation repair keeps the v2 fields, public signatures and canonical
+encoding unchanged. Previously accepted states with inapplicable numerical bases
+or hidden chronology regressions now fail validation. Retain their immutable bytes
+for audit; publish a newly supported state rather than editing historical records.
+
 ## Version boundary and identity
 
 Every object, including nested objects, is schema_version=2. Names such as
@@ -145,12 +150,25 @@ cannot be established, quarantine the report. A delayed old report cannot be giv
 a new source sequence just because it arrived later. source_as_of, when available,
 is the edition's snapshot time, not the time an individual ballot was cast.
 
+Within one race-definition revision, chronology witnesses are scoped to the exact
+(Coverage, source_id) stream, including reporting unit and method coverage. Source
+object IDs/revision chains do NOT reset those witnesses within a stream. An
+independent source, unit or reporting-method coverage has its own witnesses.
+Known source_as_of uses a high-water mark across all intervening None values:
+2026-11-04 01:00Z -> None -> 2026-11-03 01:00Z is rejected. Equal or advancing known
+timestamps are allowed, including across corrections; None remains None in raw
+observations and never invents a timestamp.
+
 `materialize_counts(race, observations)` deterministically checks receipt order,
 strictly advancing source sequence, nonregressing known source_as_of, exact race
 revision and candidate ordering. Semantics are:
 
 - CUMULATIVE: replace a coverage/source total. A known decrease requires CORRECTION;
   a new missing value stays unknown, rather than carrying forward an old count.
+  Candidate values and each of the five VoteQuantities accounting fields retain
+  separate last-known chronology witnesses across unknown totals. Thus 4 -> None
+  -> 1 needs an explicit correction for that field; a missing current value never
+  erases its witness or gets filled from it.
 - INCREMENTAL: add ONCE to the latest materialized total in that coverage/source.
   base_observation_id is mandatory and points to the preceding observation, even
   when that preceding observation was itself an increment. None + anything=None.
@@ -159,7 +177,10 @@ revision and candidate ordering. Semantics are:
 - CORRECTION: replace the latest total, with an explicit base; decreases are legal.
   Values are replacement totals, not signed deltas. Evidence revision lineage is
   independently checked: a correction may be a revision of a prior source object
-  or a new official correction bulletin.
+  or a new official correction bulletin. Only an applicable, non-rejected
+  correction can lower a field's witness. It must supply a known replacement for
+  that field: None preserves the previous witness. A superseded/rejected correction
+  cannot authorize a later cumulative decrease by resetting a witness.
 
 Duplicate observations must be deduplicated idempotently by A before constructing
 the tuple; repeating an ID inside a CountingState is rejected. Same logical ID
@@ -178,6 +199,34 @@ EVERY other raw observation, with SUPERSEDED, OVERLAPPING_REDUNDANT or SOURCE_CO
 and a concrete explanation. Selected observations must be the latest in their
 coverage/source stream AND use the selected latest source-object revision.
 SUPERSEDED cannot be used to hide a current source total.
+
+Numerical applicability is transitive. The reducer tracks a numerical base edge
+for every INCREMENTAL observation; CountingState walks the complete closure from
+every selected row. Each consumed observation's exact evidence ID must still be
+selected/applicable at the state cutoff and pass validate_count. This includes
+intermediate increments and the original cumulative/corrected base, not only the
+last descendant. An ancestor may be excluded from the active spatial sum as
+SUPERSEDED while its evidence remains applicable and numerically required; this
+is distinct from its evidence being superseded by a source revision or REJECTED.
+
+CUMULATIVE and CORRECTION provide independently sourced replacement totals and cut
+the numerical chain. A correction's base reference is a chronology link, not a
+numerical input. A verified replacement must have its own applicable evidence,
+advance the same stream's source sequence, and satisfy timestamp/witness rules
+(a decreased replacement needs CORRECTION). Only subsequent verified increments
+based on that replacement may form a new active chain. Merely receiving a revised
+base payload does not fix old descendants: do not silently retarget/reapply their
+deltas, alter receipt times, or reuse values from the invalidated chain.
+
+Rejected/superseded envelopes and structurally valid raw observations stay in the
+audit catalog/history with explicit exclusions. Historical materialize_counts can
+produce audit rows, including rejected rows; it has no cutoff selection argument
+and does NOT certify active applicability. Publish/use the validated CountingState,
+which applies the complete EvidenceSelection to numerical bases and correction
+witness authority. validate_count still rejects REJECTED observations as inputs.
+Invalidated historical counts/timestamps may conservatively constrain chronology;
+unknown current output remains unknown, and independently verified corrections
+are required rather than inferring a reset from a gap.
 
 STATE_TOTAL selects only statewide ALL; COUNTY_TOTALS selects county ALL;
 METHOD_DETAIL selects known methods/mixed subsets; EXPLICIT_RECONCILIATION requires
@@ -361,7 +410,12 @@ withdrawal/replacement revisions, two statewide draws with multiple paired local
 residuals, cumulative/incremental/corrected totals, explicit overlapping raw totals,
 partial/full partitions, delayed receipts, equal timestamps, DST folds and hash
 conflicts. Fixture artifacts have distinct hashes of actual retained synthetic
-bytes; they assert no historical coefficients or accuracy.
+bytes; they assert no historical coefficients or accuracy. REAL-enum count fixtures
+exercise VERIFIED_OFFICIAL/REJECTED validator branches only; they are explicitly
+constructed test inputs, not authenticated feeds or real historical results. Their
+enclosing model/prior remains SYNTHETIC. Additional regressions cover transitive
+root/intermediate invalidation, verified rebasing, timestamp gaps, and every
+candidate/accounting-field witness across missing values.
 
 ## Immutable storage and verification
 

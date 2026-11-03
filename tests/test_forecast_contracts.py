@@ -15,7 +15,7 @@ from forecasting.contracts import (
 )
 from forecast_fixtures import (
     ASSET_BYTES, T0, asset, store, evidence, fixture, make_race, revised_race,
-    selection, inputs, known_quantities,
+    selection, inputs, known_quantities, real_counting_observation,
 )
 
 
@@ -31,11 +31,12 @@ def advance(obs, *, semantics='CUMULATIVE', votes=(5, None, 0), revision=False, 
         quantities=VoteQuantities(), base_observation_id=obs.observation_id if semantics != 'CUMULATIVE' else None)
 
 
-def state_for(case, observations, selected=None, **partition_changes):
+def state_for(case, observations, selected=None, evidence_history=(), **partition_changes):
     race, _, _, _, prior, state, _ = case
     selected = selected or (observations[-1].observation_id,)
-    cutoff = max(o.evidence.received_at for o in observations)
-    sel = selection((*prior.evidence, *(o.evidence for o in observations)), cutoff)
+    catalog = (*prior.evidence, *(o.evidence for o in observations), *evidence_history)
+    cutoff = max(e.received_at for e in catalog)
+    sel = selection(catalog, cutoff)
     excluded = tuple(ExcludedObservation(observation_id=o.observation_id, reason='SUPERSEDED',
         explanation='Replaced by later source total for this coverage.')
         for o in observations if o.observation_id not in selected)
@@ -548,3 +549,190 @@ def test_candidate_status_does_not_infer_winner_eligibility():
     with pytest.raises(ValueError, match='Aggregate write-ins'):
         replace(candidate, kind='WRITE_IN_AGGREGATE')
     assert replace(candidate, kind='WRITE_IN_AGGREGATE', winner_eligibility='UNRESOLVED').kind == 'WRITE_IN_AGGREGATE'
+
+
+def superseding_evidence(original, after, quality=None):
+    at = after.received_at + timedelta(seconds=1)
+    return replace(original, evidence_id=f'{original.evidence_id}:revised',
+        received_at=at, published_at=at, receipt_order=after.receipt_order + 1,
+        revision=original.revision + 1, supersedes_id=original.evidence_id,
+        quality=quality or original.quality, raw_payload=asset('revised-numerical-base'))
+
+
+@pytest.mark.parametrize('origin,quality', [
+    ('SYNTHETIC', 'SYNTHETIC'), ('REAL', 'VERIFIED_OFFICIAL'), ('REAL', 'REJECTED')])
+@pytest.mark.parametrize('depth,invalid_index', [(1, 0), (3, 0), (3, 1), (3, 2)])
+def test_selected_increment_rejects_transitively_inapplicable_base(origin, quality, depth, invalid_index):
+    case = fixture()
+    first = real_counting_observation(case[3]) if origin == 'REAL' else case[3]
+    history = [first]
+    for i in range(depth):
+        history.append(advance(history[-1], semantics='INCREMENTAL', votes=(1, 0, 0), suffix=f'inc-{i}'))
+    state = state_for(case, tuple(history))
+    assert state.materialized_counts.rows[0].votes == (4 + depth, None, 0)
+    # Exclusion from the active sum does NOT invalidate an otherwise applicable base.
+    assert state.partition.excluded[0].reason == 'SUPERSEDED'
+    assert first.evidence.evidence_id in state.evidence.selected_ids
+    invalidated = history[invalid_index]
+    revision = superseding_evidence(invalidated.evidence, history[-1].evidence, quality)
+    sel = selection((*state.evidence.catalog, revision), revision.received_at)
+    assert invalidated.evidence.evidence_id not in sel.selected_ids
+    assert history[-1].evidence.evidence_id in sel.selected_ids
+    with pytest.raises(ValueError, match='Inapplicable numerical dependency'):
+        replace(state, evidence_cutoff=sel.cutoff, evidence=sel)
+    wire = json.loads(canonical_json(state))
+    wire['evidence'] = json.loads(canonical_json(sel))
+    wire['evidence_cutoff'] = sel.cutoff.isoformat()
+    with pytest.raises(ValueError, match='Inapplicable numerical dependency'):
+        from_json(json.dumps(wire))
+
+
+@pytest.mark.parametrize('semantics,votes', [('CUMULATIVE', (10, None, 0)), ('CORRECTION', (1, None, 0))])
+def test_verified_replacement_rebases_multistep_increment_chain(semantics, votes):
+    case = fixture()
+    first = real_counting_observation(case[3])
+    inc1 = advance(first, semantics='INCREMENTAL', votes=(1, 0, 0), suffix='inc-1')
+    inc2 = advance(inc1, semantics='INCREMENTAL', votes=(2, 0, 0), suffix='inc-2')
+    revision = superseding_evidence(first.evidence, inc2.evidence)
+    replacement = advance(inc2, semantics=semantics, votes=votes, suffix='replacement')
+    replacement = replace(replacement, evidence=revision, source_as_of=revision.published_at)
+    final = advance(replacement, semantics='INCREMENTAL', votes=(2, 0, 0), suffix='after-rebase')
+    state = state_for(case, (first, inc1, inc2, replacement, final))
+    assert first.evidence.evidence_id not in state.evidence.selected_ids
+    assert state.materialized_counts.rows[0].votes == (votes[0] + 2, None, 0)
+    restored = from_json(canonical_json(state))
+    assert restored == state and content_id(restored) == content_id(state)
+    assert restored.observations[0] == first  # superseded raw observation retained
+
+
+def test_rejected_revision_is_audit_only_after_verified_correction_and_rebase():
+    case = fixture()
+    first = real_counting_observation(case[3])
+    inc1 = advance(first, semantics='INCREMENTAL', votes=(1, 0, 0))
+    rejected = superseding_evidence(first.evidence, inc1.evidence, 'REJECTED')
+    restored = superseding_evidence(rejected, rejected, 'VERIFIED_OFFICIAL')
+    correction = advance(inc1, semantics='CORRECTION', votes=(1, None, 0), suffix='verified-correction')
+    correction = replace(correction, evidence=restored, source_as_of=restored.published_at)
+    inc2 = advance(correction, semantics='INCREMENTAL', votes=(2, 0, 0), suffix='rebased-inc')
+    state = state_for(case, (first, inc1, correction, inc2), evidence_history=(rejected,))
+    assert rejected in state.evidence.catalog and rejected.evidence_id not in state.evidence.selected_ids
+    assert state.materialized_counts.rows[0].votes == (3, None, 0)
+    assert from_json(canonical_json(state)) == state
+
+
+def test_rejected_raw_observation_retained_but_cannot_supply_numerical_base():
+    case = fixture()
+    real = real_counting_observation(case[3])
+    rejected = replace(real, evidence=replace(real.evidence, quality='REJECTED'))
+    increment = advance(rejected, semantics='INCREMENTAL', votes=(1, 0, 0))
+    increment = replace(increment, evidence=replace(increment.evidence, quality='VERIFIED_OFFICIAL'))
+    with pytest.raises(ValueError, match='Official result provenance'):
+        validate_count(case[0], rejected)
+    with pytest.raises(ValueError, match='Inapplicable numerical dependency'):
+        state_for(case, (rejected, increment))
+    correction = advance(increment, semantics='CORRECTION', votes=(1, None, 0), suffix='replacement')
+    state = state_for(case, (rejected, increment, correction))
+    assert state.observations[0].evidence.quality == 'REJECTED'
+    assert state.materialized_counts.rows[0].votes == (1, None, 0)
+    assert from_json(canonical_json(state)) == state
+
+
+@pytest.mark.parametrize('revision', [False, True])
+def test_known_source_timestamp_high_water_survives_unknown(revision):
+    case = fixture()
+    first = case[3]  # exact 2026-11-04 01:00Z
+    assert first.source_as_of == datetime(2026, 11, 4, 1, tzinfo=timezone.utc)
+    unknown = replace(advance(first, votes=first.votes), source_as_of=None)
+    regressed = advance(unknown, votes=first.votes, revision=revision, suffix='regressed')
+    regressed = replace(regressed, source_as_of=datetime(2026, 11, 3, 1, tzinfo=timezone.utc))
+    assert materialize_counts(case[0], (first, unknown))[1].votes == first.votes
+    with pytest.raises(ValueError, match='Old source snapshot'):
+        materialize_counts(case[0], (first, unknown, regressed))
+
+
+@pytest.mark.parametrize('hours', [0, 1])
+def test_equal_or_advancing_known_timestamp_after_unknown_is_valid(hours):
+    case = fixture()
+    first = case[3]
+    unknown = replace(advance(first, votes=first.votes), source_as_of=None)
+    last = advance(unknown, votes=first.votes, suffix='known-again')
+    received = first.evidence.received_at + timedelta(hours=2)
+    last = replace(last, evidence=replace(last.evidence, received_at=received, published_at=received),
+                   source_as_of=first.source_as_of + timedelta(hours=hours))
+    state = state_for(case, (first, unknown, last))
+    assert state.observations[1].source_as_of is None
+    assert from_json(canonical_json(state)) == state
+
+
+@pytest.mark.parametrize('scope', ['source', 'county', 'method'])
+def test_known_timestamp_and_count_witnesses_are_scoped_to_independent_streams(scope):
+    case = fixture()
+    first = case[3]
+    other = advance(first, votes=(1, None, 0))
+    other = replace(other, source_sequence=1, source_as_of=first.source_as_of - timedelta(days=1))
+    if scope == 'source':
+        other = replace(other, evidence=replace(other.evidence, source_id='fixture:independent-source'))
+    elif scope == 'county':
+        other = replace(other, coverage=Coverage(unit_id=case[0].reporting_units[2].unit_id, ballot_method='ALL'))
+    else:
+        other = replace(other, coverage=Coverage(unit_id=first.coverage.unit_id, ballot_method='MAIL'))
+    assert materialize_counts(case[0], (first, other))[-1].votes == (1, None, 0)
+
+
+@pytest.mark.parametrize('candidate_index', [0, 1, 2])
+def test_cumulative_candidate_decrease_across_unknown_needs_correction(candidate_index):
+    case = fixture()
+    votes = [None, None, None]
+    votes[candidate_index] = 4
+    first = replace(case[3], votes=tuple(votes), quantities=VoteQuantities())
+    unknown = advance(first, votes=(None, None, None), suffix='missing')
+    votes[candidate_index] = 1
+    lower = advance(unknown, votes=tuple(votes), suffix='lower')
+    rows = materialize_counts(case[0], (first, unknown))
+    assert rows[-1].votes[candidate_index] is None
+    with pytest.raises(ValueError, match='Decrease requires explicit CORRECTION'):
+        materialize_counts(case[0], (first, unknown, lower))
+    corrected = replace(lower, semantics='CORRECTION', base_observation_id=unknown.observation_id)
+    next_total = advance(corrected, votes=corrected.votes, suffix='equal-after-correction')
+    state = state_for(case, (first, unknown, corrected, next_total))
+    assert state.materialized_counts.rows[0].votes[candidate_index] == 1
+    assert from_json(canonical_json(state)) == state
+
+
+@pytest.mark.parametrize('field', ['ballots_cast', 'valid_contest_votes', 'undervotes', 'overvotes', 'invalid_contest_ballots'])
+def test_cumulative_ballot_accounting_decrease_across_unknown_needs_correction(field):
+    case = fixture()
+    first = replace(case[3], votes=(None, None, None), quantities=VoteQuantities(**{field: 4}))
+    unknown = advance(first, votes=first.votes, suffix='missing')
+    lower = replace(advance(unknown, votes=first.votes, suffix='lower'), quantities=VoteQuantities(**{field: 1}))
+    assert getattr(materialize_counts(case[0], (first, unknown))[-1].quantities, field) is None
+    with pytest.raises(ValueError, match='Quantity decrease requires CORRECTION'):
+        materialize_counts(case[0], (first, unknown, lower))
+    corrected = replace(lower, semantics='CORRECTION', base_observation_id=unknown.observation_id)
+    next_total = replace(advance(corrected, votes=first.votes, suffix='advancing-after-correction'),
+                         quantities=VoteQuantities(**{field: 2}))
+    state = state_for(case, (first, unknown, corrected, next_total))
+    assert getattr(state.materialized_counts.rows[0].quantities, field) == 2
+    assert from_json(canonical_json(state)) == state
+
+
+def test_unknown_correction_field_does_not_erase_known_count_witness():
+    case = fixture()
+    first = case[3]
+    unknown = advance(first, semantics='CORRECTION', votes=(None, None, None))
+    lower = advance(unknown, votes=(1, None, 0), suffix='lower')
+    with pytest.raises(ValueError, match='Decrease requires explicit CORRECTION'):
+        materialize_counts(case[0], (first, unknown, lower))
+
+
+@pytest.mark.parametrize('quality', ['VERIFIED_OFFICIAL', 'REJECTED'])
+def test_inapplicable_correction_cannot_authorize_later_cumulative_decrease(quality):
+    case = fixture()
+    first = real_counting_observation(case[3])
+    correction = advance(first, semantics='CORRECTION', votes=(1, None, 0))
+    current = advance(correction, votes=(2, None, 0), suffix='current')
+    state = state_for(case, (first, correction, current))
+    revision = superseding_evidence(correction.evidence, current.evidence, quality)
+    sel = selection((*state.evidence.catalog, revision), revision.received_at)
+    with pytest.raises(ValueError, match='Decrease requires explicit CORRECTION'):
+        replace(state, evidence_cutoff=sel.cutoff, evidence=sel)
