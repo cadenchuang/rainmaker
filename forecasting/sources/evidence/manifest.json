@@ -1,0 +1,72 @@
+[
+  {
+    "file": "census-counties.raw",
+    "receipt_file": "census-counties.receipt.json",
+    "url": "https://www2.census.gov/geo/docs/reference/codes2020/national_county2020.txt",
+    "received_at": "2026-11-03T12:22:43.932234+00:00",
+    "sha256": "9f6e5f6eb6ac2f5e9a36d5fd01dec77991bddc75118f748a069441a4782970d6",
+    "source_id": "census-2020",
+    "results_file": false,
+    "receipt_sha256": "33707269e9e6897487e0b2f6252b2304ee7325adc34e7fdb75f67e0851a49d65"
+  },
+  {
+    "file": "mn-all-county.raw",
+    "receipt_file": "mn-all-county.receipt.json",
+    "url": "https://electionresultsfiles.sos.mn.gov/20261103/allracesbycounty.txt",
+    "received_at": "2026-11-03T12:22:23.354004+00:00",
+    "sha256": "374608a6ff43ec0f7868610b72200723ab388485e62dc4abea8c88a3b1cacf0a",
+    "source_id": "mn-sos-2026",
+    "results_file": true,
+    "receipt_sha256": "a35cd6c09114c39254dc4c1ccf4165f2a3a9736dd43b1b6527e8dca1db4e99b9"
+  },
+  {
+    "file": "mn-candidates.raw",
+    "receipt_file": "mn-candidates.receipt.json",
+    "url": "https://electionresultsfiles.sos.mn.gov/20261103/cand.txt",
+    "received_at": "2026-11-03T12:22:23.607283+00:00",
+    "sha256": "b31eac36b60745638cc1c59f7246452b3836379811aa1f72cf07bf86a86c86ee",
+    "source_id": "mn-sos-2026",
+    "results_file": false,
+    "receipt_sha256": "82229196a09ea305eee7b5fa340ac0e3660b7c02f4b0c721e5bdca973030d322"
+  },
+  {
+    "file": "mn-counties.raw",
+    "receipt_file": "mn-counties.receipt.json",
+    "url": "https://electionresultsfiles.sos.mn.gov/20261103/Cntytbl.txt",
+    "received_at": "2026-11-03T12:22:23.445550+00:00",
+    "sha256": "1830c4b1993606049c397c7f318cf36db33219d660b1528ba4df074ab8e5a570",
+    "source_id": "mn-sos-2026",
+    "results_file": false,
+    "receipt_sha256": "8c136ccf6203d66fd41d086856c9f20dfa5d57ad32f26cf80cd112b0b454f707"
+  },
+  {
+    "file": "mn-index.html",
+    "receipt_file": "mn-index.receipt.json",
+    "url": "https://electionresults.sos.mn.gov/Select/MediaFiles/Index?ersElectionId=201",
+    "received_at": "2026-11-03T12:22:05.790855+00:00",
+    "sha256": "37b2a7f728c2bf7ec27f51bd17152ed93fe4a1e3f308b1c712c614cbbd8c4d7e",
+    "source_id": "mn-sos-2026",
+    "results_file": false,
+    "receipt_sha256": "87d18c29ed99e305c60c3a689a6c538d105e4d5f38e00284450db512620630d9"
+  },
+  {
+    "file": "mn-layout.raw",
+    "receipt_file": "mn-layout.receipt.json",
+    "url": "https://electionresults.sos.mn.gov/Results/MediaFileLayout/Index?erselectionId=201",
+    "received_at": "2026-11-03T12:22:22.713307+00:00",
+    "sha256": "d8f387d6f4aa48ebbc379d4f9d613adc1061500f92cffd976f9d64dfa406bee2",
+    "source_id": "mn-sos-2026",
+    "results_file": false,
+    "receipt_sha256": "c350788100219d0f105fff41a9d1df7c83354fd3a3810abdd91b6dd337a9f890"
+  },
+  {
+    "file": "mn-senate-county.raw",
+    "receipt_file": "mn-senate-county.receipt.json",
+    "url": "https://electionresultsfiles.sos.mn.gov/20261103/ussenatecty.txt",
+    "received_at": "2026-11-03T12:22:22.887463+00:00",
+    "sha256": "33d083defa8abb5dc7875c24bef62e9489b3c2e52e0c72bd9cf17998f30edd6a",
+    "source_id": "mn-sos-2026",
+    "results_file": true,
+    "receipt_sha256": "e73689aa8f3a6a357f39347971f8223f078b59bd810fab8b36a34dd837a3693d"
+  }
+]

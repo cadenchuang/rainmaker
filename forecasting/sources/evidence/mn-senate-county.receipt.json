@@ -1,0 +1,20 @@
+{
+  "url": "https://electionresultsfiles.sos.mn.gov/20261103/ussenatecty.txt",
+  "received_at": "2026-11-03T12:22:22.887463+00:00",
+  "headers": {
+    "Content-Type": "text/plain",
+    "Last-Modified": "Mon, 02 Nov 2026 17:33:16 GMT",
+    "Accept-Ranges": "bytes",
+    "ETag": "\"8411803ef06add1:0\"",
+    "Date": "Tue, 03 Nov 2026 12:22:22 GMT",
+    "Connection": "close",
+    "Content-Length": "28653",
+    "X-Frame-Options": "SAMEORIGIN",
+    "X-XSS-Protection": "1; mode=block",
+    "X-Content-Type-Options": "nosniff",
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload;",
+    "Referrer-Policy": "no-referrer-when-downgrade",
+    "Expect-CT": "max-age=60; enforce"
+  },
+  "status": 200
+}

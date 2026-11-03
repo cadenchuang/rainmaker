@@ -270,20 +270,21 @@ def test_revision_ancestry_selection_forks_and_cross_graph_conflicts():
 def test_raw_overlap_preserved_but_active_double_count_rejected():
     case = fixture()
     county = case[3]
-    state_total = advance(county, suffix='state')
-    state_total = replace(state_total, coverage=Coverage(unit_id='US:IN', ballot_method='ALL'))
-    method = advance(state_total, suffix='mail')
+    method = advance(county, suffix='mail')
     method = replace(method, coverage=Coverage(unit_id=county.coverage.unit_id, ballot_method='MAIL'))
-    observations = (county, state_total, method)
+    state_total = advance(method, suffix='state', votes=(100,50,5))
+    state_total = replace(state_total, coverage=Coverage(unit_id='US:IN', ballot_method='ALL'),
+        reporting_status='COMPLETE',quantities=known_quantities((100,50,5)))
+    observations = (county, method, state_total)
     partition = replace(case[5].partition, selected_observation_ids=(state_total.observation_id,),
         excluded=tuple(ExcludedObservation(observation_id=o.observation_id, reason='OVERLAPPING_REDUNDANT',
             explanation='Explicitly prefer statewide aggregate for this synthetic example.') for o in (county, method)),
         precedence='STATE_TOTAL', require_complete_coverage=True)
-    state = replace(case[5], evidence_cutoff=method.evidence.received_at,
-        evidence=selection((*case[4].evidence, *(o.evidence for o in observations)), method.evidence.received_at),
+    state = replace(case[5], evidence_cutoff=state_total.evidence.received_at,
+        evidence=selection((*case[4].evidence, *(o.evidence for o in observations)), state_total.evidence.received_at),
         observations=observations, partition=partition,
         materialized_counts=MaterializedCounts(race_definition=case[0].ref,
-            rows=(materialize_counts(case[0], observations)[1],)))
+            rows=(materialize_counts(case[0], observations)[2],)))
     assert len(state.observations) == 3 and len(state.materialized_counts.rows) == 1
     with pytest.raises(ValueError):
         replace(state, partition=replace(partition,
