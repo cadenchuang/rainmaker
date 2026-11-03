@@ -9,6 +9,8 @@ The count-validation repair keeps the v2 fields, public signatures and canonical
 encoding unchanged. Previously accepted states with inapplicable numerical bases
 or hidden chronology regressions now fail validation. Retain their immutable bytes
 for audit; publish a newly supported state rather than editing historical records.
+Valid independent replacements can now recover when obsolete, historically valid
+intermediate reports are retained. No v2 field or canonical-byte migration is needed.
 
 ## Version boundary and identity
 
@@ -177,10 +179,12 @@ revision and candidate ordering. Semantics are:
 - CORRECTION: replace the latest total, with an explicit base; decreases are legal.
   Values are replacement totals, not signed deltas. Evidence revision lineage is
   independently checked: a correction may be a revision of a prior source object
-  or a new official correction bulletin. Only an applicable, non-rejected
-  correction can lower a field's witness. It must supply a known replacement for
-  that field: None preserves the previous witness. A superseded/rejected correction
-  cannot authorize a later cumulative decrease by resetting a witness.
+  or a new official correction bulletin. In raw audit replay, a non-rejected
+  correction retains its declared historical effect even if later superseded. In
+  the effective pass, only a currently applicable, non-rejected correction can
+  lower a field's witness. It must supply a known replacement for that field:
+  None preserves the previous witness. Superseded/rejected correction authority
+  cannot authorize a decrease in an active cumulative chain.
 
 Duplicate observations must be deduplicated idempotently by A before constructing
 the tuple; repeating an ID inside a CountingState is rejected. Same logical ID
@@ -218,15 +222,49 @@ based on that replacement may form a new active chain. Merely receiving a revise
 base payload does not fix old descendants: do not silently retarget/reapply their
 deltas, alter receipt times, or reuse values from the invalidated chain.
 
-Rejected/superseded envelopes and structurally valid raw observations stay in the
-audit catalog/history with explicit exclusions. Historical materialize_counts can
-produce audit rows, including rejected rows; it has no cutoff selection argument
-and does NOT certify active applicability. Publish/use the validated CountingState,
-which applies the complete EvidenceSelection to numerical bases and correction
-witness authority. validate_count still rejects REJECTED observations as inputs.
-Invalidated historical counts/timestamps may conservatively constrain chronology;
-unknown current output remains unknown, and independently verified corrections
-are required rather than inferring a reset from a gap.
+Rejected/superseded envelopes and raw observations stay in the audit catalog/history
+with explicit exclusions. CountingState performs two deterministic checks over the
+same receipt-ordered sequence; exclusion alone skips neither check:
+
+1. Raw audit replay validates EVERY supplied observation: exact race/candidate/
+   coverage identity, row accounting, unique receipt order, advancing source
+   sequence, known-timestamp high-water marks across None, immediate chronology
+   bases, and cumulative count witnesses under the immutable reports' declared
+   semantics. A historically verified correction still explains a subsequent
+   historical cumulative total even when that correction is superseded later.
+   Retroactive applicability does not rewrite what the source originally reported.
+   An actual unexplained raw decrease, broken base or timestamp/sequence regression
+   still fails even if a later independent replacement is selected.
+2. Effective validation walks the complete numerical dependency closure from the
+   selected rows and requires current applicable evidence for every consumed base.
+   It replays witnesses with CURRENT correction authority, checking cumulative
+   decreases for those numerical consumers. All rows still supply conservative
+   witness information, with None never erasing a known field. It does not demand
+   that obsolete intermediate rows remain valid active outputs under today's
+   revision selection. An independent applicable correction can reset its known
+   fields and rebase subsequent increments; an invalid ancestor cannot contribute
+   to selected incremental arithmetic.
+
+For example, cumulative (4,3,0), correction (1,1,0), cumulative (2,2,0), and a new
+correction (3,3,0) superseding the first correction is valid when only the last row
+is selected. The old (2,2,0) was valid in the declared historical sequence; it is
+not reinterpreted as an unexplained active decrease before reaching the new
+correction. Selecting an increment rooted in the obsolete correction still fails.
+Selecting (2,2,0) itself without a currently applicable correcting basis still fails.
+
+Historical materialize_counts produces audit rows, including rejected rows; it has
+no cutoff selection argument and does NOT certify active applicability. Publish/use
+the validated CountingState instead. validate_count still rejects REJECTED inputs.
+Unknown fields of a current correction retain relevant effective witnesses; they
+do not implicitly authorize a later decrease. Timestamp high-water marks cover the
+ENTIRE raw stream in both passes and never reset at correction/replacement edges.
+
+Retaining a valid historical prefix yields the same selected MaterializedCounts as
+an equivalent compacted valid history when the suffix retains the necessary
+chronology bases, independent snapshots, revision evidence ancestry and relevant
+witnesses. Complete CountingState hashes differ because audit lineage differs.
+This is a validation equivalence, not a compaction implementation or permission to
+delete audit records, omit corrupt history, or discard witnesses across None.
 
 STATE_TOTAL selects only statewide ALL; COUNTY_TOTALS selects county ALL;
 METHOD_DETAIL selects known methods/mixed subsets; EXPLICIT_RECONCILIATION requires

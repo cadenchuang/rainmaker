@@ -736,3 +736,116 @@ def test_inapplicable_correction_cannot_authorize_later_cumulative_decrease(qual
     sel = selection((*state.evidence.catalog, revision), revision.received_at)
     with pytest.raises(ValueError, match='Decrease requires explicit CORRECTION'):
         replace(state, evidence_cutoff=sel.cutoff, evidence=sel)
+
+
+def correction_recovery_history(case, *, real=True, replacement_semantics='CORRECTION'):
+    """Four immutable editions; the last independently replaces the first correction."""
+    first = real_counting_observation(case[3]) if real else case[3]
+    first = replace(first, votes=(4, 3, 0), quantities=known_quantities((4, 3, 0)))
+    correction = replace(advance(first, semantics='CORRECTION', votes=(1, 1, 0), suffix='old-correction'),
+                         quantities=known_quantities((1, 1, 0)))
+    cumulative = replace(advance(correction, votes=(2, 2, 0), suffix='historical-total'),
+                         quantities=known_quantities((2, 2, 0)))
+    votes = (3, 3, 0) if replacement_semantics == 'CORRECTION' else (5, 4, 0)
+    replacement = advance(cumulative, semantics=replacement_semantics, votes=votes, suffix='current-replacement')
+    replacement = replace(replacement, evidence=superseding_evidence(correction.evidence, cumulative.evidence),
+                          quantities=known_quantities(votes))
+    return first, correction, cumulative, replacement
+
+
+@pytest.mark.parametrize('office', ['US_SENATE', 'GOVERNOR'])
+@pytest.mark.parametrize('real', [False, True])
+def test_current_correction_recovers_with_superseded_historical_correction_retained(office, real):
+    case = fixture(office)
+    history = correction_recovery_history(case, real=real)
+    state = state_for(case, history)
+    assert tuple(o.votes for o in state.observations) == ((4, 3, 0), (1, 1, 0), (2, 2, 0), (3, 3, 0))
+    assert history[1].evidence.evidence_id not in state.evidence.selected_ids
+    assert state.partition.selected_observation_ids == (history[3].observation_id,)
+    assert tuple(e.observation_id for e in state.partition.excluded) == tuple(o.observation_id for o in history[:3])
+    assert state.materialized_counts.rows[0].votes == (3, 3, 0)
+    restored = from_json(canonical_json(state))
+    assert restored == state and content_id(restored) == content_id(state)
+
+
+@pytest.mark.parametrize('replacement_semantics', ['CUMULATIVE', 'CORRECTION'])
+def test_retained_history_and_equivalent_compacted_history_have_same_active_counts(replacement_semantics):
+    case = fixture()
+    history = correction_recovery_history(case, replacement_semantics=replacement_semantics)
+    retained = state_for(case, history)
+    # The cumulative row is an independent snapshot; keep it as the correction's
+    # explicit chronology base. All original evidence/revision ancestry is retained.
+    compacted = state_for(case, history[2:], evidence_history=tuple(o.evidence for o in history[:2]))
+    compacted = replace(compacted, state_id=f'{compacted.state_id}:compacted')
+    assert compacted.materialized_counts == retained.materialized_counts
+    assert compacted.evidence == retained.evidence
+    assert compacted.partition.selected_observation_ids == retained.partition.selected_observation_ids
+    assert content_id(compacted) != content_id(retained)  # different audit lineage
+    assert from_json(canonical_json(compacted)).materialized_counts == retained.materialized_counts
+    increment = advance(history[-1], semantics='INCREMENTAL', votes=(1, 0, 0), suffix='rebased-increment')
+    full_next = state_for(case, (*history, increment))
+    compact_next = state_for(case, (*history[2:], increment), evidence_history=tuple(o.evidence for o in history[:2]))
+    assert full_next.materialized_counts == compact_next.materialized_counts
+
+
+@pytest.mark.parametrize('quality', ['VERIFIED_OFFICIAL', 'REJECTED'])
+def test_recovery_does_not_allow_invalidated_incremental_bases_or_ancestors(quality):
+    case = fixture()
+    history = correction_recovery_history(case)
+    inc1 = advance(history[-1], semantics='INCREMENTAL', votes=(1, 0, 0), suffix='rebased-inc-1')
+    inc2 = advance(inc1, semantics='INCREMENTAL', votes=(1, 0, 0), suffix='rebased-inc-2')
+    state = state_for(case, (*history, inc1, inc2))
+    assert state.materialized_counts.rows[0].votes == (5, 3, 0)
+    for invalidated in (history[-1], inc1):
+        revision = superseding_evidence(invalidated.evidence, inc2.evidence, quality)
+        sel = selection((*state.evidence.catalog, revision), revision.received_at)
+        with pytest.raises(ValueError, match='Inapplicable numerical dependency'):
+            replace(state, evidence_cutoff=sel.cutoff, evidence=sel)
+
+
+@pytest.mark.parametrize('defect', ['candidate_decrease', 'timestamp_regression', 'source_sequence_regression', 'broken_base'])
+def test_latest_replacement_cannot_conceal_corrupt_unselected_raw_history(defect):
+    case = fixture()
+    first, old_correction, cumulative, current = correction_recovery_history(case)
+    if defect == 'candidate_decrease':
+        cumulative = replace(cumulative, votes=(0, 0, 0), quantities=known_quantities((0, 0, 0)))
+        message = 'Decrease requires explicit CORRECTION'
+    elif defect == 'timestamp_regression':
+        old_correction = replace(old_correction, source_as_of=None)
+        cumulative = replace(cumulative, source_as_of=first.source_as_of - timedelta(days=1))
+        message = 'Old source snapshot'
+    elif defect == 'source_sequence_regression':
+        cumulative = replace(cumulative, source_sequence=old_correction.source_sequence)
+        message = 'Old/repeated source sequence'
+    else:
+        old_correction = replace(old_correction, base_observation_id='missing-base')
+        message = 'Base must be latest'
+    with pytest.raises(ValueError, match=message):
+        state_for(case, (first, old_correction, cumulative, current))
+
+
+@pytest.mark.parametrize('unknown_field', ['candidate', 'ballots_cast'])
+def test_effective_witness_survives_unknown_field_in_replacement(unknown_field):
+    case = fixture()
+    history = correction_recovery_history(case)
+    if unknown_field == 'candidate':
+        current = replace(history[-1], votes=(3, None, 0), quantities=VoteQuantities())
+        later = advance(current, votes=(3, 2, 0), suffix='later-total')
+        message = 'Decrease requires explicit CORRECTION'
+    else:
+        current = replace(history[-1], quantities=replace(history[-1].quantities, ballots_cast=None))
+        later = replace(advance(current, votes=current.votes, suffix='later-total'),
+                        quantities=known_quantities(current.votes))
+        message = 'Quantity decrease requires CORRECTION'
+    history = (*history[:3], current)
+    state = state_for(case, history)
+    row = state.materialized_counts.rows[0]
+    assert (row.votes[1] if unknown_field == 'candidate' else row.quantities.ballots_cast) is None
+    # The raw historical correction permitted the old total. Its superseded
+    # authority cannot erase the effective field witness inherited through None.
+    assert materialize_counts(case[0], (*history, later))[-1].votes == later.votes
+    with pytest.raises(ValueError, match=message):
+        state_for(case, (*history, later))
+    corrected = replace(later, semantics='CORRECTION', base_observation_id=current.observation_id)
+    recovered = state_for(case, (*history, corrected))
+    assert from_json(canonical_json(recovered)) == recovered

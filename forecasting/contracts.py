@@ -716,9 +716,10 @@ class MaterializedCount(Contract):
 
 
 def _materialize_count_history(race: RaceDefinition, observations: tuple[CountingObservation, ...],
-                               applicable_evidence_ids: frozenset[str] | None = None
+                               applicable_evidence_ids: frozenset[str] | None = None,
+                               checked_count_ids: frozenset[str] | None = None
                                ) -> tuple[tuple[MaterializedCount, ...], dict[str, tuple[str, ...]]]:
-    """Audit rows plus numerical base edges; chronology witnesses never fill output None."""
+    """Replay all chronology; optionally restrict effective count checks to numerical consumers."""
     seen, latest, totals, numerical_bases = {}, {}, {}, {}
     known_timestamps, known_values = {}, {}
     quantity_fields = tuple(f.name for f in fields(VoteQuantities) if f.name != 'schema_version')
@@ -756,7 +757,7 @@ def _materialize_count_history(race: RaceDefinition, observations: tuple[Countin
             numerical_bases[obs.observation_id] = ()
         values = (*votes, *(getattr(quantities, name) for name in quantity_fields))
         witness = known_values.get(stream, (None,) * len(values))
-        if obs.semantics == 'CUMULATIVE':
+        if obs.semantics == 'CUMULATIVE' and (checked_count_ids is None or obs.observation_id in checked_count_ids):
             require(all(a is None or b is None or b >= a for a, b in zip(witness[:candidate_count], votes)),
                     'Decrease requires explicit CORRECTION')
             require(all(a is None or b is None or b >= a for a, b in
@@ -833,8 +834,8 @@ class CountingState(Contract):
         require(race.ref == self.partition.race_definition == self.materialized_counts.race_definition, 'Count partition definition mismatch')
         registry = {e.evidence_id: e for e in self.evidence.catalog}
         require(all(registry.get(o.evidence.evidence_id) == o.evidence for o in self.observations), 'Counting evidence not in catalog')
-        rows, numerical_bases = _materialize_count_history(
-            race, self.observations, frozenset(self.evidence.selected_ids))
+        # Audit replay uses each immutable report as received, before later revisions.
+        rows, numerical_bases = _materialize_count_history(race, self.observations)
         by_id = {o.observation_id: o for o in self.observations}
         selected = self.partition.selected_observation_ids
         excluded = {e.observation_id: e for e in self.partition.excluded}
@@ -857,6 +858,10 @@ class CountingState(Contract):
                     f'Inapplicable numerical dependency: {oid}')
             validate_count(race, dependency)
             pending.extend(numerical_bases[oid])
+        # Current applicability must hold for active consumers, not obsolete audit rows.
+        # All reports still contribute witnesses, and the audit pass above checks every row.
+        _materialize_count_history(race, self.observations,
+                                   frozenset(self.evidence.selected_ids), frozenset(consumed))
         for oid, exclusion in excluded.items():
             obs = by_id[oid]
             require(exclusion.reason != 'SUPERSEDED' or latest[obs.coverage, obs.evidence.source_id] != oid
