@@ -1,5 +1,12 @@
 # Agent B pre-election forecasting
 
+Integration integrity update: fitted input payloads now retain canonical historical
+observations in versioned ridge-training-v2, local-profiles-v2 and
+statewide-features-v2 documents. Evaluation replays the supported fit and local
+profiles, verifies source bytes, and derives the union of label/profile/feature
+race membership. Old anonymous matrix artifacts remain archived and cannot
+certify an independent holdout. Shared v2 contracts and model statuses are unchanged.
+
 This branch implements an **experimental research pipeline**, with no actual
 forecasts, historical observations, or manually specified model coefficients.
 Shared contracts, ingestion, counting, approval and execution are unchanged.

@@ -13,7 +13,7 @@ from forecasting.contracts import (ArtifactRef, Contract, InputArtifact, InputMa
     ModelArtifact, RNGSpec, RNGStream, RunManifest, JointDraw, JointSimulation,
     LocalDraw, LocalAllocationPayload, LocalAllocationManifest, ElectionPrior,
     VoteQuantities, canonical_json, content_id, require, verify_artifact)
-from forecasting.history import available_history, historical_features, party_axis
+from forecasting.history import available_history, historical_features, party_axis, historical_payload
 from forecasting.baseline import fit_fundamentals
 
 
@@ -133,12 +133,16 @@ def build_prior(*, race, history, examples, selection, store, fitted_at, created
             available_at=max(e.received_at for e in sources), source_evidence_ids=ids)
 
     training_sources = tuple(e for x in examples for r in (x.target,x.feature_result) for e in r.evidence)
-    train_input = derived(tuple(examples), training_sources)
+    train_input = derived({'schema': 'ridge-training-v2', 'examples': [
+        {'target': historical_payload(x.target), 'feature_result': historical_payload(x.feature_result),
+         'feature_cutoff': x.feature_cutoff.isoformat(), 'features': x.features} for x in examples]}, training_sources)
     local_sources = tuple(e for r in profile_results for e in r.evidence)
-    profile_input = derived(profiles, local_sources)
+    profile_input = derived({'schema': 'local-profiles-v2', 'profiles': profiles,
+                            'history': [historical_payload(r) for r in profile_results]}, local_sources)
     feature_sources = tuple(e for r in available_history(history,race,selection) for e in r.evidence)
     # Only available history may be serialized as a consumed feature dataset.
-    feature_input = derived({'features':features, 'history':available_history(history,race,selection)}, feature_sources)
+    feature_input = derived({'schema': 'statewide-features-v2', 'features':features,
+        'history':[historical_payload(h) for h in available_history(history,race,selection)]}, feature_sources)
     code = store.put(b'\n'.join(Path(__file__).with_name(name).read_bytes()
                               for name in ('history.py','baseline.py','prior.py','contracts.py')))
     transforms = store.save({'feature':'latest same-state/office election party log ratios, log contest turnout, years gap',

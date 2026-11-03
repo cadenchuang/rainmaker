@@ -1,5 +1,11 @@
 # Forecasting integration coordination
 
+Evaluation-integrity repair after review of 79d14e5: trusted complete outcome
+materialization and recovered fitting membership are now required for scoring.
+See EVALUATION.md and INTEGRATION.md. Focused suites: 39 passed; full suite:
+351 passed. Old caller-supplied outcome/training declarations are insufficient.
+The baseline status below is historical, not certification of the old evaluator.
+
 Current integration milestone: worker tips were rechecked clean and cherry-picked
 onto feature/forecast-integration by explicit user authorization. See
 [INTEGRATION.md](INTEGRATION.md) for the current runnable slice, ownership decision,

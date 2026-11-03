@@ -9,6 +9,7 @@ from .contracts import (
 )
 from .evaluation import Outcome, audit_forecast, score
 from .prior import ArtifactStore, manifest
+from .evaluation_integrity import verify_outcome, reconcile_training
 
 
 def verify_graph(value: Contract, store: ArtifactStore) -> Contract:
@@ -57,45 +58,49 @@ def prior_record(prior: ElectionPrior, store: ArtifactStore, *, created_at: date
 
 
 def evaluate_record(record: ForecastRecord, outcome: Outcome, store: ArtifactStore,
-                    *, training: tuple[Outcome, ...]) -> dict:
+                    *, training: tuple[Outcome, ...], official_adapter=None) -> dict:
     """D's scoring arithmetic with explicit pre-election versus live audit boundaries.
 
     This scores one frozen prediction, not a historical validation study. Live
     scoring never enters D's pre-election holdout report or promotes model status.
     """
     record = verify_graph(record, store)
-    store.get(outcome.evidence.raw_payload)
+    binding = verify_outcome(outcome, store, official_adapter=official_adapter)
+    actual_training = reconcile_training(record, training, store, official_adapter=official_adapter)
     require(outcome.evidence.received_at > record.evidence_cutoff, 'Outcome was already available')
     require(all(o.cycle < outcome.cycle and o.evidence.received_at <= record.evidence_cutoff
                 for o in training), 'Training label leakage')
     if record.counting_state is None:
-        audit_forecast(record, outcome, record.evidence_cutoff, training)
+        audit_forecast(record, outcome, record.evidence_cutoff, training, store=store, official_adapter=official_adapter)
         phase = 'PRE_ELECTION'
     else:
         require(record.counting_state.prior == record.prior, 'Live prior mismatch')
         require(record.counting_state.evidence_cutoff == record.evidence_cutoff, 'Live cutoff mismatch')
         phase = 'LIVE_COUNTING'
-    metrics = score(record, outcome, outcome.candidate_ids[:2])
-    synthetic = record.origin == 'SYNTHETIC' or outcome.origin == 'SYNTHETIC'
+    metrics = score(record, outcome, outcome.candidate_ids[:2], store=store, official_adapter=official_adapter)
+    synthetic = record.origin == 'SYNTHETIC' or binding['origin'] == 'SYNTHETIC'
     return dict(metrics, phase=phase, origin='SYNTHETIC' if synthetic else 'REAL',
-                forecast_sha256=content_id(record), outcome_sha256=content_id(outcome.evidence),
-                race_id=outcome.race.race_id, training_ids=[o.race.race_id for o in training],
+                forecast_sha256=content_id(record), outcome_sha256=outcome.materialization.sha256,
+                race_id=outcome.race.race_id, training_ids=[h.race.race_id for h in actual_training],
                 limitation='Single frozen prediction; no accuracy, calibration or historical evaluation claim.')
 
 
 def evaluation_run(record: ForecastRecord, outcome: Outcome, store: ArtifactStore,
-                   selection: EvidenceSelection, *, created_at: datetime) -> RunManifest:
+                   selection: EvidenceSelection, *, created_at: datetime, official_adapter=None) -> RunManifest:
     """Bind a D report to retained predictor, outcome and evaluator implementation."""
     require(selection.cutoff >= outcome.evidence.received_at, 'Outcome unavailable for scoring')
-    code = store.put(Path(__file__).read_bytes() + Path(__file__).with_name('evaluation.py').read_bytes())
+    binding = verify_outcome(outcome, store, official_adapter=official_adapter)
+    code = store.put(b'\n'.join(Path(__file__).with_name(n).read_bytes() for n in
+                    ('integration.py','evaluation.py','evaluation_integrity.py')))
     config = store.save({'method': 'D.score; all-candidate fractions; single prediction',
-                         'outcome_evidence': content_id(outcome.evidence), 'status': 'EXPERIMENTAL'})
+                         'outcome_materialization': outcome.materialization.sha256, 'status': 'EXPERIMENTAL'})
     ids = tuple(e.evidence_id for e in dependency_evidence(record) if e.evidence_id in selection.selected_ids)
     item = InputArtifact(artifact=store.save(record), kind='FEATURES', version='scored-record-v1',
                          available_at=record.evidence_cutoff, source_evidence_ids=ids)
     require(outcome.race.ref == record.prior.race.ref, 'Outcome race revision mismatch')
-    outcome_item = InputArtifact(artifact=store.save(outcome), kind='COUNTS', version='outcome-v1',
-        available_at=outcome.evidence.received_at, source_evidence_ids=(outcome.evidence.evidence_id,))
+    outcome_item = InputArtifact(artifact=outcome.materialization, kind='COUNTS', version='materialized-outcome-v1',
+        available_at=outcome.evidence.received_at,
+        source_evidence_ids=tuple(e['id'] for e in binding['selected_evidence']))
     inputs = manifest(store, record.prior.race, selection, (item, outcome_item), False)
     model = ModelArtifact(model_id=f'evaluator:{code.sha256}:{config.sha256}', role='EVALUATION',
         origin='SYNTHETIC' if record.origin == 'SYNTHETIC' or outcome.origin == 'SYNTHETIC' else 'REAL',

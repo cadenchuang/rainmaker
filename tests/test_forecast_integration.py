@@ -10,6 +10,7 @@ from forecasting.counting import CountingConfig, forecast, replay
 from forecasting.evaluation import Outcome, audit_forecast
 from forecasting.integration import evaluate_record, verify_graph
 from forecasting.synthetic_slice import instant, prepare, run_office
+from forecasting.evaluation_integrity import materialize_outcome
 
 
 @pytest.fixture
@@ -98,9 +99,12 @@ def test_pre_and_live_evaluation_boundaries(case):
     for raw in live.artifacts.values():
         case.artifacts.put(raw)
     final = case.report('evaluation-final', (900, 650, 160), at+timedelta(hours=1), status='COMPLETE', sequence=2)
-    outcome = Outcome(case.race, 2026, final.candidate_ids, final.votes, final.evidence)
-    assert evaluate_record(live.record, outcome, case.artifacts, training=())['phase'] == 'LIVE_COUNTING'
+    final_state = case.state((partial, final), (final.observation_id,), final.evidence.received_at, complete=True)
+    outcome = materialize_outcome(final_state, case.artifacts)
+    training = tuple(Outcome(h.race, h.race.election_date.year,
+        tuple(c.candidate_id for c in h.race.candidates), h.votes, h.observations[0].evidence) for h in case.history)
+    assert evaluate_record(live.record, outcome, case.artifacts, training=training)['phase'] == 'LIVE_COUNTING'
     with pytest.raises(ValueError, match='Pre-election scoring'):
         audit_forecast(live.record, outcome, at, ())
-    with pytest.raises(ValueError, match='already available'):
-        evaluate_record(live.record, replace(outcome, evidence=partial.evidence), case.artifacts, training=())
+    with pytest.raises(ValueError, match='evidence differs'):
+        evaluate_record(live.record, replace(outcome, evidence=partial.evidence), case.artifacts, training=training)

@@ -19,6 +19,7 @@ from .integration import evaluate_record, evaluation_run, prior_record, verify_g
 from .prior import ArtifactStore, build_prior
 from .sources.store import SourceStore
 from .sources.totals import counting_state
+from .evaluation_integrity import materialize_outcome
 
 
 def instant(year: int, month: int = 1, day: int = 1) -> datetime:
@@ -36,7 +37,7 @@ class SyntheticCase:
     pre_record: ForecastRecord | None
 
     def evidence(self, name, kind, at, payload):
-        raw = json.dumps({'origin': 'SYNTHETIC', 'fixture': name, 'payload': payload},
+        raw = json.dumps({'origin': 'SYNTHETIC', 'fixture': name, 'received_at': at.isoformat(), 'payload': payload},
                          sort_keys=True, separators=(',', ':')).encode()
         rid = self.sources.retain('synthetic:vertical-slice', name, f'fixture://{name}', raw,
                                   received_at=at, receipt_id=f'synthetic:{name}')
@@ -48,7 +49,8 @@ class SyntheticCase:
                semantics='CUMULATIVE', base=None):
         coverage = coverage or Coverage(unit_id=f'US:{self.race.state}', ballot_method='ALL')
         payload = dict(votes=votes, coverage=json.loads(canonical_json(coverage)), status=status,
-                       sequence=sequence, semantics=semantics, base=base, race_ref=content_id(self.race))
+                       sequence=sequence, semantics=semantics, base=base, race_ref=content_id(self.race),
+                       candidate_ids=[c.candidate_id for c in self.race.candidates], source_as_of=at.isoformat())
         e = self.evidence(name, 'OFFICIAL_RESULTS', at, payload)
         # Normalize only bytes read back from the retained source store.
         saved = json.loads(self.sources.raw(e.raw_payload))['payload']
@@ -149,7 +151,7 @@ def run_office(root: Path, office: str) -> dict:
             case.artifacts.put(raw)
         verify_graph(complete.record, case.artifacts)
         assert all(votes == final.votes for votes in complete.final_votes)
-        outcome = Outcome(case.race, 2026, final.candidate_ids, final.votes, final.evidence)
+        outcome = materialize_outcome(complete_state, case.artifacts)
         training = tuple(Outcome(h.race, h.race.election_date.year,
             tuple(c.candidate_id for c in h.race.candidates), h.votes, h.observations[0].evidence) for h in case.history)
         rows = [evaluate_record(record, outcome, case.artifacts, training=training)

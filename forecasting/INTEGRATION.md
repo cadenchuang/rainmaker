@@ -4,6 +4,13 @@ This branch integrates A/B/C/D without changing shared v2 contracts, trading,
 approval, broker or execution code. It is a synthetic software demonstration,
 not an operational real-data forecast or historical accuracy study.
 
+Evaluation-integrity repair after independent review of 79d14e5: scored outcomes
+now require a reverified complete source materialization, and declared training
+membership must equal membership recovered from supported immutable fitting
+inputs. The old caller-supplied labels and anonymous local profile payloads cannot
+certify evaluation. See [EVALUATION.md](EVALUATION.md) for the trusted boundary,
+versioned fitting payloads and real-data limitations.
+
 ## Reviewed inputs and ownership
 
 Rechecked all sibling worktrees before integration: all clean. Source branch tips:
@@ -29,6 +36,7 @@ From repository root, using the existing Python environment:
 ```sh
 .venv/bin/python -m forecasting.synthetic_slice --output /tmp/rainmaker-slice
 .venv/bin/python -m pytest -q tests/test_forecast_integration.py
+.venv/bin/python -m pytest -q tests/test_evaluation_integrity_integration.py
 .venv/bin/python -m pytest -q
 git diff --check
 ```
@@ -83,7 +91,38 @@ arithmetic results, not independent races supporting an accuracy claim. The two
 offices deliberately use the same invented vote patterns; pooling them would not
 create empirical evidence. This slice does not implement a local scoring study.
 
-## Observed integration results (2026-11-03)
+## Evaluation-integrity repair validation
+
+Full suite: **351 passed** with local test-server permission. Focused suites:
+**39 passed**, including 18 new cross-component integrity
+regressions. The exact reviewer vote replacement `(1, 2000, 0)` fails against the
+unchanged evidence; even rehashing that arbitrary vector fails recomputation.
+Empty membership, omission of the first history used in profiles/features,
+contradictory totals, direct/local target inclusion, unknown calibration inputs,
+and missing/tampered/insufficient fitting inputs all fail closed.
+
+The repaired Senate and governor slices ran at `/tmp/rainmaker-integrity-committable`.
+Both retain SYNTHETIC/EXPERIMENTAL/RESEARCH_ONLY status, six derived historical
+members for five regression examples, identical replay and exact complete-count
+convergence. Each report's pre-election and live rows reference the same verified
+complete outcome artifact. New report hashes:
+
+- Senate: `12a8dd61a2347b6f07f065cc8f0a0a5c8b084f0c9e1fb06a4ea572924143ac2f`.
+- Governor: `387b031b60847e335a1383f315d6d46129ec1e3af8cfa50a12a1869bb2277cc5`.
+
+No authentic complete official-result fixture exists in this checkout. REAL-enum
+eligibility tests use a clearly mocked source decoder and invented bytes; they
+exercise incomplete county coverage, missing counts, overlaps, test-release
+rejection and the positive final-result adapter protocol. They establish no real
+provenance or empirical performance. A production official decoder/authentication
+policy and genuine historical inputs remain required.
+
+## Baseline integration results at 79d14e5 (superseded evaluation bindings)
+
+The following records describe the original software demonstration. Independent
+review subsequently found its outcome and membership checks insufficient; these
+old report hashes do not certify valid evaluation under the repaired boundary.
+Retain the original bytes for audit rather than rewriting their provenance.
 
 Final full suite: **333 passed** with local test-server permission. Targeted
 integration regressions: **6 passed**. `git diff --check` passed. Shared contracts

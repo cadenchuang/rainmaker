@@ -11,8 +11,12 @@ from zoneinfo import ZoneInfo
 
 from forecasting.contracts import (
     RaceDefinition, EvidenceEnvelope, ForecastRecord, CountingObservation,
-    dependency_evidence, validate_dependency_graph, materialize_counts, content_id,
+    ArtifactRef, dependency_evidence, validate_dependency_graph, materialize_counts, content_id,
 )
+
+
+class EvaluationUnavailable(ValueError):
+    """An adapter has no supported independently fitted vintage for this target."""
 
 
 @dataclass(frozen=True)
@@ -22,6 +26,7 @@ class Outcome:
     candidate_ids: tuple[str, ...]
     votes: tuple[int | None, ...]
     evidence: EvidenceEnvelope
+    materialization: ArtifactRef | None = None
 
     def __post_init__(self):
         if self.cycle != self.race.election_date.year:
@@ -59,14 +64,16 @@ def scorable(o):
             and o.evidence.quality in ('VERIFIED_OFFICIAL', 'SYNTHETIC'))
 
 
-def audit_forecast(record, target, cutoff, training):
+def audit_forecast(record, target, cutoff, training, *, store=None, official_adapter=None):
     validate_dependency_graph(record)
     if record.prior.race.ref != target.race.ref or record.evidence_cutoff != cutoff:
         raise ValueError('Wrong race mapping or as-of cutoff')
     if record.counting_state is not None:
         raise ValueError('Pre-election scoring cannot consume election-night counts')
+    from .evaluation_integrity import reconcile_training
+    reconcile_training(record, training, store, official_adapter=official_adapter)
     allowed = {o.race.race_id for o in training}
-    # The adapter must expose label membership, not just an opaque model hash.
+    # Declarations have already been reconciled with immutable fitted inputs.
     for o in training:
         if o.cycle >= target.cycle or o.evidence.received_at > cutoff:
             raise ValueError('Training label leakage')
@@ -86,12 +93,14 @@ def quantile(values, q):
     return values[lo] + (values[math.ceil(x)] - values[lo]) * (x - lo)
 
 
-def score(record, outcome, pair, interval=0.9):
+def score(record, outcome, pair, interval=0.9, *, store=None, official_adapter=None):
     """Pairwise margin, candidate-vs-field win event; ties excluded, not guessed."""
     if not scorable(outcome) or not record.output_draws:
         raise ValueError('Missing outcome or draws')
     if record.prior.race.ref != outcome.race.ref:
         raise ValueError('Wrong race mapping')
+    from .evaluation_integrity import verify_outcome
+    verify_outcome(outcome, store, official_adapter=official_adapter)
     if not 0 < interval < 1 or len(pair) != 2 or pair[0] == pair[1]:
         raise ValueError('Invalid interval/pair')
     i, j = (outcome.candidate_ids.index(c) for c in pair)
@@ -138,20 +147,24 @@ def summarize(rows):
     return dict(n=n, coverage_wilson_95=[center-radius, center+radius], metrics={k: sum(r[k] for r in rows)/len(rows) for k in keys}, calibration=bins)
 
 
-def evaluate(outcomes, predict, *, sparse_threshold=3):
+def evaluate(outcomes, predict, *, sparse_threshold=3, store=None, official_adapter=None):
     """predict(training, race, cutoff) -> (ForecastRecord, training_race_ids, poll_count).
 
-    Adapter declares complete training membership for audit; opaque hidden training
-    data cannot be independently certified. Sparse = unique selected poll envelopes.
+    Declared membership must match the supported immutable fitted inputs. Opaque
+    or insufficient fitting lineage is rejected. Sparse = unique poll envelopes.
     """
     if type(sparse_threshold) is not int or sparse_threshold < 1:
         raise ValueError('Positive sparse threshold required')
     ids = [o.race.race_id for o in outcomes]
     if len(set(ids)) != len(ids):
         raise ValueError('Duplicate outcome race')
+    from .evaluation_integrity import verify_outcome
+    for o in outcomes:
+        verify_outcome(o, store, official_adapter=official_adapter)
     rows, exclusions, provenance = [], [], []
     for target in sorted(outcomes, key=lambda o: (o.race.election_date, o.race.race_id)):
         provenance.append(dict(race_id=target.race.race_id, origin=target.origin,
+            outcome_artifact=target.materialization.sha256,
             outcome_evidence=content_id(target.evidence), raw_sha256=target.evidence.raw_payload.sha256,
             source_url=target.evidence.source_url, received_at=target.evidence.received_at.isoformat()))
         for days in (30, 7, 1):
@@ -163,20 +176,26 @@ def evaluate(outcomes, predict, *, sparse_threshold=3):
             if not train:
                 exclusions.append(dict(race_id=target.race.race_id, days=days, reason='No earlier eligible cycle'))
                 continue
-            record, used_ids, poll_count = predict(train, target.race, cutoff)
+            try:
+                record, used_ids, poll_count = predict(train, target.race, cutoff)
+            except EvaluationUnavailable as exc:
+                exclusions.append(dict(race_id=target.race.race_id, days=days, reason=str(exc)))
+                continue
             if len(set(used_ids)) != len(used_ids) or not set(used_ids) <= {o.race.race_id for o in train}:
                 raise ValueError('Undeclared or held-out training membership')
-            audit_forecast(record, target, cutoff, train)
+            used = tuple(o for o in train if o.race.race_id in used_ids)
+            audit_forecast(record, target, cutoff, used, store=store, official_adapter=official_adapter)
             polls = {e.evidence_id for e in record.run.inputs.evidence.catalog
                      if e.source_kind == 'POLL' and e.evidence_id in record.run.inputs.evidence.selected_ids}
             if poll_count != len(polls):
                 raise ValueError('Poll count disagrees with deduplicated evidence')
-            result = score(record, target, target.candidate_ids[:2])
+            result = score(record, target, target.candidate_ids[:2], store=store, official_adapter=official_adapter)
             origin = 'SYNTHETIC' if (target.origin == 'SYNTHETIC' or record.origin == 'SYNTHETIC'
                 or any(o.origin == 'SYNTHETIC' for o in train if o.race.race_id in used_ids)) else 'REAL'
             rows.append(dict(**result, origin=origin, office=target.race.office,
                 sparse=poll_count < sparse_threshold, days=days, cycle=target.cycle,
-                race_id=target.race.race_id, forecast_sha256=content_id(record), training_ids=list(used_ids)))
+                race_id=target.race.race_id, forecast_sha256=content_id(record),
+                outcome_sha256=target.materialization.sha256, training_ids=sorted(used_ids)))
     groups = {}
     for origin in ('REAL', 'SYNTHETIC'):
         for days in (30, 7, 1):
@@ -195,7 +214,7 @@ def evaluate(outcomes, predict, *, sparse_threshold=3):
             log_probability_floor=1e-15, quantile='linear interpolation',
             cutoff='local midnight minus calendar days',
             holdout='strictly earlier election years with labels received by cutoff'),
-        limitations=['Adapter training membership is declared; opaque parameter leakage cannot be proven absent.',
+        limitations=['Fitting membership is verified only for supported immutable fitting formats; unknown lineage is rejected.',
                       'Local performance requires separate authentic artifacts; baseline is zero margin / 50% event probability.',
                       'Coverage Wilson intervals assume independent races within a subgroup; repeated horizons are correlated. No empirical edge claimed.'])
 
@@ -241,6 +260,9 @@ def report_artifact(report, run):
     hashes = {item.artifact.sha256 for item in run.inputs.ordered_inputs}
     if not {r['forecast_sha256'] for r in report['rows']} <= hashes:
         raise ValueError('Evaluation run omits scored forecast artifacts')
+    if any(not r.get('outcome_sha256') for r in report['rows']) or not {
+            r['outcome_sha256'] for r in report['rows']} <= hashes:
+        raise ValueError('Evaluation run omits materialized outcome artifacts')
     payload = json.dumps(dict(report=report, run=json.loads(canonical_json(run))),
                          sort_keys=True, separators=(',', ':'), allow_nan=False).encode()
     digest = sha256(payload).hexdigest()

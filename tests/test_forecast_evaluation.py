@@ -6,6 +6,8 @@ import pytest
 from forecasting.evaluation import (Outcome, cutoff_for, chronological_training,
     score, summarize, evaluate, historical_replay, audit_forecast)
 from forecast_fixtures import fixture, evidence, T0
+from forecasting.synthetic_slice import prepare, instant
+from forecasting.evaluation_integrity import materialize_outcome
 
 
 def outcome(race, votes=(40, 35, 25)):
@@ -15,16 +17,24 @@ def outcome(race, votes=(40, 35, 25)):
 
 
 @pytest.mark.parametrize('office', ['US_SENATE', 'GOVERNOR'])
-def test_metrics(office):
-    race, *_, record = fixture(office)
-    s = score(record, outcome(race), tuple(c.candidate_id for c in race.candidates[:2]))
-    assert s['margin_absolute_error'] == pytest.approx(.10)
-    assert s['brier'] == 0
-    assert math.isfinite(s['log_loss'])
-    assert s['covered'] == 0
-    assert summarize([s])['n'] == 1
-    assert sum(b['n'] for b in summarize([s])['calibration']) == 1
-    assert summarize([])['metrics'] is None
+def test_metrics(office, tmp_path):
+    case = prepare(tmp_path, office)
+    try:
+        final = case.report('metric-final', (40,35,25), instant(2026,11,4), status='COMPLETE')
+        state = case.state((final,), (final.observation_id,), final.evidence.received_at, complete=True)
+        o = materialize_outcome(state, case.artifacts)
+        record = case.pre_record
+        s = score(record, o, o.candidate_ids[:2], store=case.artifacts)
+        expected_margin = sum(d.shares[0]-d.shares[1] for d in record.output_draws)/len(record.output_draws)
+        assert s['margin_absolute_error'] == pytest.approx(abs(expected_margin-.05))
+        assert s['brier'] == 0
+        assert math.isfinite(s['log_loss'])
+        assert s['covered'] == 0
+        assert summarize([s])['n'] == 1
+        assert sum(b['n'] for b in summarize([s])['calibration']) == 1
+        assert summarize([])['metrics'] is None
+    finally:
+        case.sources.close()
 
 
 def test_cutoffs_and_cycle_holdout():
@@ -54,10 +64,8 @@ def test_mapping_missing_and_duplicates():
     other = outcome(fixture('GOVERNOR')[0])
     with pytest.raises(ValueError, match='mapping'):
         score(record, other, other.candidate_ids[:2])
-    report = evaluate((o,), None)
-    assert len(report['exclusions']) == 3
-    assert all(g['n'] == 0 for g in report['groups'].values())
-    assert report['provenance'][0]['origin'] == 'SYNTHETIC'
+    with pytest.raises(ValueError, match='trusted outcome materialization'):
+        evaluate((o,), None)
 
 
 def test_no_synthetic_replay_or_early_count_extrapolation():
@@ -100,18 +108,17 @@ def dataset():
 def test_end_to_end_groups_and_leakage():
     def predict(train, race, cutoff):
         return preelection(race, cutoff), tuple(o.race.race_id for o in train), 1
-    report = evaluate(dataset(), predict)
-    assert len(report['rows']) == 6
-    assert report['unique_races'] == 2
-    assert report['groups']['SYNTHETIC/7/GOVERNOR/True']['n'] == 1
-    assert report['groups']['REAL/7/ALL/ALL']['n'] == 0
+    # These old enumerated fixtures have neither raw-normalized outcomes nor
+    # authenticated fitting lineage; they may no longer certify performance.
+    with pytest.raises(ValueError, match='trusted outcome materialization'):
+        evaluate(dataset(), predict)
     def leak(train, race, cutoff):
         return preelection(race, cutoff), (race.race_id,), 1
-    with pytest.raises(ValueError, match='held-out'):
+    with pytest.raises(ValueError, match='trusted outcome materialization'):
         evaluate(dataset(), leak)
     def duplicate_poll(train, race, cutoff):
         return preelection(race, cutoff), (), 2
-    with pytest.raises(ValueError, match='Poll count'):
+    with pytest.raises(ValueError, match='trusted outcome materialization'):
         evaluate(dataset(), duplicate_poll)
 
 

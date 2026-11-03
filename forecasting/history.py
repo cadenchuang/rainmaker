@@ -5,7 +5,23 @@ from math import log
 from zoneinfo import ZoneInfo
 
 from forecasting.contracts import (RaceDefinition, CountingObservation, EvidenceSelection,
-    validate_count, validate_partition, require)
+    validate_count, validate_partition, require, canonical_json, from_json)
+import json
+
+
+def historical_payload(result):
+    """Versioned fitting inputs retain canonical identities, not anonymous matrices."""
+    return {'race': json.loads(canonical_json(result.race)),
+            'observations': [json.loads(canonical_json(o)) for o in result.observations]}
+
+
+def historical_from_payload(payload):
+    require(set(payload) == {'race', 'observations'}, 'Unsupported fitting history')
+    race = from_json(json.dumps(payload['race']))
+    rows = tuple(from_json(json.dumps(o)) for o in payload['observations'])
+    require(type(race) is RaceDefinition and all(type(o) is CountingObservation for o in rows),
+            'Invalid fitting history types')
+    return HistoricalResult(race, rows)
 
 
 @dataclass(frozen=True)
