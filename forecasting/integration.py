@@ -9,7 +9,7 @@ from .contracts import (
 )
 from .evaluation import Outcome, audit_forecast, score
 from .prior import ArtifactStore, manifest
-from .evaluation_integrity import verify_outcome, reconcile_training
+from .evaluation_integrity import verify_outcome, reconcile_training, outcome_available_at
 
 
 def verify_graph(value: Contract, store: ArtifactStore) -> Contract:
@@ -67,7 +67,7 @@ def evaluate_record(record: ForecastRecord, outcome: Outcome, store: ArtifactSto
     record = verify_graph(record, store)
     binding = verify_outcome(outcome, store, official_adapter=official_adapter)
     actual_training = reconcile_training(record, training, store, official_adapter=official_adapter)
-    require(outcome.evidence.received_at > record.evidence_cutoff, 'Outcome was already available')
+    require(outcome_available_at(outcome,binding) > record.evidence_cutoff, 'Outcome was already available')
     require(all(o.cycle < outcome.cycle and o.evidence.received_at <= record.evidence_cutoff
                 for o in training), 'Training label leakage')
     if record.counting_state is None:
@@ -88,8 +88,9 @@ def evaluate_record(record: ForecastRecord, outcome: Outcome, store: ArtifactSto
 def evaluation_run(record: ForecastRecord, outcome: Outcome, store: ArtifactStore,
                    selection: EvidenceSelection, *, created_at: datetime, official_adapter=None) -> RunManifest:
     """Bind a D report to retained predictor, outcome and evaluator implementation."""
-    require(selection.cutoff >= outcome.evidence.received_at, 'Outcome unavailable for scoring')
     binding = verify_outcome(outcome, store, official_adapter=official_adapter)
+    available_at = outcome_available_at(outcome,binding)
+    require(selection.cutoff >= available_at, 'Outcome unavailable for scoring')
     code = store.put(b'\n'.join(Path(__file__).with_name(n).read_bytes() for n in
                     ('integration.py','evaluation.py','evaluation_integrity.py')))
     config = store.save({'method': 'D.score; all-candidate fractions; single prediction',
@@ -98,9 +99,10 @@ def evaluation_run(record: ForecastRecord, outcome: Outcome, store: ArtifactStor
     item = InputArtifact(artifact=store.save(record), kind='FEATURES', version='scored-record-v1',
                          available_at=record.evidence_cutoff, source_evidence_ids=ids)
     require(outcome.race.ref == record.prior.race.ref, 'Outcome race revision mismatch')
-    outcome_item = InputArtifact(artifact=outcome.materialization, kind='COUNTS', version='materialized-outcome-v1',
-        available_at=outcome.evidence.received_at,
-        source_evidence_ids=tuple(e['id'] for e in binding['selected_evidence']))
+    outcome_item = InputArtifact(artifact=outcome.materialization, kind='COUNTS', version=binding['schema'],
+        available_at=available_at,
+        source_evidence_ids=tuple(dict.fromkeys(e['id'] for key in
+            ('selected_evidence','comparison_evidence','reconciliation_evidence') for e in binding.get(key,()))))
     inputs = manifest(store, record.prior.race, selection, (item, outcome_item), False)
     model = ModelArtifact(model_id=f'evaluator:{code.sha256}:{config.sha256}', role='EVALUATION',
         origin='SYNTHETIC' if record.origin == 'SYNTHETIC' or outcome.origin == 'SYNTHETIC' else 'REAL',

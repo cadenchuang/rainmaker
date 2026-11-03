@@ -9,7 +9,7 @@ import pytest
 
 from forecast_fixtures import fixture, make_race, evidence, selection, T0
 from forecasting.contracts import (
-    ArtifactRef, Coverage, ReportingUnit, VoteQuantities, content_id,
+    ArtifactRef, Coverage, ReportingUnit, VoteQuantities, content_id, SourceReconciliation, canonical_json,
 )
 from forecasting.sources.audit import EVIDENCE, import_retained
 from forecasting.sources.minnesota import (
@@ -199,7 +199,18 @@ def test_multiple_sources_and_overlap_require_explicit_reconciliation():
         active_totals(race,(a,b),ev,(a.observation_id,b.observation_id),precedence='COUNTY_TOTALS')
     with pytest.raises(ValueError,match='reconciliation'):
         active_totals(race,(a,b),ev,(a.observation_id,),precedence='COUNTY_TOTALS')
-    _, partition, totals=active_totals(race,(a,b),ev,(a.observation_id,),precedence='EXPLICIT_RECONCILIATION',reconciliation='Synthetic official bulletin confirms the first source is authoritative for this county',reconciliation_evidence_ids=(a.evidence.evidence_id,))
+    # A winning report's envelope and producer prose are not independent evidence.
+    with pytest.raises(ValueError,match='reconciliation document'):
+        active_totals(race,(a,b),ev,(a.observation_id,),precedence='EXPLICIT_RECONCILIATION',
+            reconciliation='Prefer the first source',reconciliation_evidence_ids=(a.evidence.evidence_id,))
+    decision=SourceReconciliation(race_definition=race.ref,selected_observation_hashes=(content_id(a),),
+        excluded_observation_hashes=(content_id(b),),issued_at=a.evidence.received_at,basis='Invented independent protocol decision')
+    raw=canonical_json(decision).encode()
+    authority=replace(evidence('independent-decision','OFFICIAL_RESULTS',99,at=a.evidence.received_at),
+        raw_payload=ArtifactRef(uri='fixture://decision',sha256=sha256(raw).hexdigest()))
+    ev=selection((a.evidence,b.evidence,authority),a.evidence.received_at)
+    _, partition, totals=active_totals(race,(a,b),ev,(a.observation_id,),precedence='EXPLICIT_RECONCILIATION',
+        reconciliation=canonical_json(decision),reconciliation_evidence_ids=(authority.evidence_id,))
     assert partition.excluded[0].reason == 'SOURCE_CONFLICT'
     assert len(totals.rows) == 1
 

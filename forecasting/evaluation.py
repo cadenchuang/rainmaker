@@ -52,11 +52,12 @@ def cutoff_for(race, days):
                              ZoneInfo(race.election_timezone))).astimezone(timezone.utc)
 
 
-def chronological_training(outcomes, target, cutoff):
+def chronological_training(outcomes, target, cutoff, *, availability=None):
     """Forward cycle holdout; excludes ALL target/future cycle labels."""
     return tuple(o for o in outcomes if o.cycle < target.cycle
                  and o.race.election_date < target.race.election_date
-                 and o.evidence.received_at <= cutoff and scorable(o))
+                 and (availability[o.race.race_id] if availability is not None else o.evidence.received_at) <= cutoff
+                 and scorable(o))
 
 
 def scorable(o):
@@ -158,18 +159,19 @@ def evaluate(outcomes, predict, *, sparse_threshold=3, store=None, official_adap
     ids = [o.race.race_id for o in outcomes]
     if len(set(ids)) != len(ids):
         raise ValueError('Duplicate outcome race')
-    from .evaluation_integrity import verify_outcome
-    for o in outcomes:
-        verify_outcome(o, store, official_adapter=official_adapter)
+    from .evaluation_integrity import verify_outcome, outcome_available_at
+    availability = {o.race.race_id: outcome_available_at(o,
+        verify_outcome(o, store, official_adapter=official_adapter)) for o in outcomes}
     rows, exclusions, provenance = [], [], []
     for target in sorted(outcomes, key=lambda o: (o.race.election_date, o.race.race_id)):
         provenance.append(dict(race_id=target.race.race_id, origin=target.origin,
             outcome_artifact=target.materialization.sha256,
+            available_at=availability[target.race.race_id].isoformat(),
             outcome_evidence=content_id(target.evidence), raw_sha256=target.evidence.raw_payload.sha256,
             source_url=target.evidence.source_url, received_at=target.evidence.received_at.isoformat()))
         for days in (30, 7, 1):
             cutoff = cutoff_for(target.race, days)
-            train = chronological_training(outcomes, target, cutoff)
+            train = chronological_training(outcomes, target, cutoff, availability=availability)
             if not scorable(target):
                 exclusions.append(dict(race_id=target.race.race_id, days=days, reason='Missing/unverified outcome'))
                 continue

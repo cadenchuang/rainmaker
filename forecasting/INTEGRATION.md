@@ -1,5 +1,11 @@
 # First forecasting vertical slice
 
+Current source-conflict validation supersedes the old exclusion-label checks.
+See [SOURCE_RECONCILIATION.md](SOURCE_RECONCILIATION.md): the exact two-source
+relabeling attack now fails at canonical construction/deserialization; supported
+equivalent snapshots and independently authenticated decisions remain usable.
+Original artifacts stay immutable and old report hashes below are historical.
+
 This branch integrates A/B/C/D without changing shared v2 contracts, trading,
 approval, broker or execution code. It is a synthetic software demonstration,
 not an operational real-data forecast or historical accuracy study.

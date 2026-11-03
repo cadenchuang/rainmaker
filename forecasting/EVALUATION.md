@@ -1,5 +1,12 @@
 # Independent evaluator
 
+Source-conflict repair after review of 4d71b69: canonical count states now derive
+exclusion applicability/equivalence rather than trusting reason labels. Outcome
+evaluation authenticates current excluded contenders and independent bound
+reconciliation decisions. Count-state labels use materialized-outcome-v2 and
+retain comparison/decision evidence and its actual availability. See
+[SOURCE_RECONCILIATION.md](SOURCE_RECONCILIATION.md) for the policy and limitations.
+
 `forecasting.evaluation` scores frozen Senate/governor artifacts. Evaluation
 requires retained artifact bytes (`store=ArtifactStore(...)`), a materialized
 outcome, and verifiable fitting lineage. It does not promote model status.

@@ -1,7 +1,8 @@
 """Deterministic producer bookkeeping; coverage choices must be explicit."""
 from forecasting.contracts import (
     ActivePartition, ExcludedObservation, MaterializedCounts, CountingState,
-    materialize_counts, validate_count, validate_partition, coverage_cells,
+    materialize_counts, validate_count, validate_partition,
+    count_exclusion_reasons, validate_count_exclusions,
 )
 
 
@@ -35,17 +36,13 @@ def active_totals(race, observations, evidence, selected_ids, *, precedence,
         if latest[obs.coverage, obs.evidence.source_id] != obs.observation_id or obs.evidence.evidence_id not in evidence.selected_ids:
             raise ValueError('Stale active total')
     validate_partition(race, tuple(o.coverage for o in selected), require_complete)
+    reasons = count_exclusion_reasons(race,history,evidence,selected_ids)
     excluded = []
     for obs in history:
         if obs.observation_id in selected_ids:
             continue
-        stale = latest[obs.coverage, obs.evidence.source_id] != obs.observation_id or obs.evidence.evidence_id not in evidence.selected_ids
-        overlapping = tuple(o for o in selected if
-            coverage_cells(race, o.coverage) & coverage_cells(race, obs.coverage))
-        if not stale and not overlapping:
-            raise ValueError('Current nonoverlapping coverage cannot be excluded')
-        conflict = not stale and any(o.evidence.source_id != obs.evidence.source_id for o in overlapping)
-        reason = 'SUPERSEDED' if stale else 'SOURCE_CONFLICT' if conflict else 'OVERLAPPING_REDUNDANT'
+        reason = reasons[obs.observation_id]
+        stale = reason == 'SUPERSEDED'
         excluded.append(ExcludedObservation(observation_id=obs.observation_id, reason=reason,
             explanation=f'Inactive edition of {obs.evidence.source_id}/{obs.evidence.source_object_id}' if stale else
                 (reconciliation or f'Producer selected {tuple(o.observation_id for o in selected)} instead of {obs.observation_id}')))
@@ -57,6 +54,7 @@ def active_totals(race, observations, evidence, selected_ids, *, precedence,
         excluded=tuple(excluded), precedence=precedence, reconciliation=reconciliation or f'Producer selected coverage IDs {tuple(selected_ids)}',
         reconciliation_evidence_ids=tuple(reconciliation_evidence_ids), require_complete_coverage=require_complete,
         require_complete_counts=False)
+    validate_count_exclusions(race,history,evidence,partition)
     materialized = MaterializedCounts(race_definition=race.ref, rows=tuple(next(r for r in rows if r.observation_id == i) for i in selected_ids))
     return history, partition, materialized
 

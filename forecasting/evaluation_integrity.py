@@ -12,7 +12,7 @@ from typing import Protocol
 
 from .contracts import (
     CountingObservation, CountingState, RaceDefinition, canonical_json, content_id,
-    from_json, require, validate_count,
+    from_json, require, validate_count, validate_count_exclusions, SourceReconciliation,
 )
 from .history import HistoricalResult, TrainingExample, historical_from_payload, historical_payload, historical_features, party_axis
 from .baseline import fit_fundamentals
@@ -39,8 +39,10 @@ class OfficialOutcomeAdapter(Protocol):
 
     def result(self, race: RaceDefinition, observation: CountingObservation, raw: bytes) -> OfficialResult: ...
 
+    def reconciliation(self, decision: SourceReconciliation, evidence, raw: bytes) -> SourceReconciliation: ...
 
-def verify_sources(race, observations, store, official_adapter=None):
+
+def verify_sources(race, observations, store, official_adapter=None, *, require_final=True):
     """Compare normalized records with retained source bytes at the trust boundary."""
     synthetic = any(e.origin == 'SYNTHETIC' for e in
                     (race.rules_evidence, race.definition_evidence, *(o.evidence for o in observations)))
@@ -64,7 +66,8 @@ def verify_sources(race, observations, store, official_adapter=None):
             # producer. Arbitrary invented enum fixtures cannot assert raw binding.
             doc = json.loads(raw)
             require(doc.get('origin') == 'SYNTHETIC' and
-                    obs.evidence.source_id == 'synthetic:vertical-slice' and
+                    obs.evidence.source_id == doc.get('source_id','synthetic:vertical-slice') and
+                    obs.evidence.source_id.startswith('synthetic:vertical-slice') and
                     obs.evidence.source_url == f"fixture://{doc['fixture']}" and
                     datetime.fromisoformat(doc['received_at']) == obs.evidence.received_at,
                     'Synthetic source identity/receipt mismatch')
@@ -88,7 +91,8 @@ def verify_sources(race, observations, store, official_adapter=None):
                     'Test-release provenance is not a final official result')
             verified = official_adapter.result(race, obs, raw)
             require(type(verified) is OfficialResult and verified.observation == obs and
-                    verified.release == 'FINAL' and verified.final_contest_coverage,
+                    verified.release in ('PARTIAL','FINAL') and
+                    (not require_final or verified.release == 'FINAL' and verified.final_contest_coverage),
                     'Unverified complete official result')
     return 'SYNTHETIC' if synthetic else 'REAL'
 
@@ -101,6 +105,7 @@ def _outcome_document(state, store, official_adapter=None):
     # chronological passes. Caller flags cannot waive any of these requirements.
     state = replace(state, partition=replace(state.partition,
                     require_complete_coverage=True, require_complete_counts=True))
+    decision = validate_count_exclusions(state.prior.race,state.observations,state.evidence,state.partition)
     rows = state.materialized_counts.rows
     require(all(r.quantities.valid_contest_votes is not None and
                 sum(r.votes) == r.quantities.valid_contest_votes for r in rows),
@@ -115,6 +120,29 @@ def _outcome_document(state, store, official_adapter=None):
             consumed.add(obs.base_observation_id)
             pending.append(obs.base_observation_id)
     origin = verify_sources(state.prior.race, tuple(by_id[i] for i in sorted(consumed)), store, official_adapter)
+    compared = consumed | {e.observation_id for e in state.partition.excluded if e.reason != 'SUPERSEDED'}
+    # An excluded contender is an input to equivalence/reconciliation, not an
+    # unauthenticated annotation. Authenticate it before accepting that decision.
+    verify_sources(state.prior.race,tuple(by_id[i] for i in sorted(compared)),store,official_adapter,require_final=False)
+    require(origin != 'REAL' or all(o.evidence.origin == 'REAL' for o in state.observations),
+            'Synthetic audit observations cannot acquire real outcome provenance')
+    reconciliation_evidence = tuple(e for e in state.evidence.catalog
+                                   if e.evidence_id in state.partition.reconciliation_evidence_ids)
+    for e in reconciliation_evidence:
+        store.get(e.raw_payload)
+        require(e.origin == origin, 'Reconciliation context cannot change synthetic/real provenance')
+    if decision is not None:
+        for e in reconciliation_evidence:
+            raw = store.get(e.raw_payload)
+            require(raw == canonical_json(decision).encode(), 'Independent reconciliation raw bytes mismatch')
+            if e.origin == 'REAL':
+                require(official_adapter is not None and e.source_url in
+                        official_adapter.source_urls.get(e.source_id,()) and
+                        callable(getattr(official_adapter,'reconciliation',None)),
+                        'Independent reconciliation authentication unavailable')
+                authenticated = official_adapter.reconciliation(decision,e,raw)
+                require(type(authenticated) is SourceReconciliation and authenticated == decision,
+                        'Independent reconciliation normalization mismatch')
     for e in (state.prior.race.rules_evidence, state.prior.race.definition_evidence):
         require(e.evidence_id in state.evidence.selected_ids, 'Unavailable outcome rules/roster')
         store.get(e.raw_payload)
@@ -124,11 +152,19 @@ def _outcome_document(state, store, official_adapter=None):
                             key=lambda e: e.receipt_key))
     # Validation strengthens requirements without republishing a changed count
     # state under its original logical ID. The outcome owns the complete partition.
-    return original_state, dict(schema='materialized-outcome-v1', state=store.save(original_state).sha256,
+    return original_state, dict(schema='materialized-outcome-v2', state=store.save(original_state).sha256,
+        available_at=max(*(by_id[i].evidence.received_at for i in compared),
+                         *(e.received_at for e in reconciliation_evidence),
+                         state.prior.race.rules_evidence.received_at,
+                         state.prior.race.definition_evidence.received_at).isoformat(),
         race_definition=content_id(state.prior.race), candidate_ids=[c.candidate_id for c in state.prior.race.candidates],
         votes=list(votes), partition=json.loads(canonical_json(state.partition)),
         materialized_counts=content_id(state.materialized_counts), origin=origin,
-        selected_evidence=[dict(id=e.evidence_id, envelope=content_id(e), raw=e.raw_payload.sha256) for e in evidence])
+        selected_evidence=[dict(id=e.evidence_id, envelope=content_id(e), raw=e.raw_payload.sha256) for e in evidence],
+        comparison_evidence=[dict(id=by_id[i].evidence.evidence_id,envelope=content_id(by_id[i].evidence),
+            raw=by_id[i].evidence.raw_payload.sha256) for i in sorted(compared)],
+        reconciliation_evidence=[dict(id=e.evidence_id,envelope=content_id(e),raw=e.raw_payload.sha256)
+                                 for e in reconciliation_evidence])
 
 
 def materialize_outcome(state, store, *, official_adapter=None):
@@ -173,6 +209,14 @@ def materialize_historical_outcome(history, selection, store, *, official_adapte
                    tuple(document['votes']), latest, store.save(document))
 
 
+def outcome_available_at(outcome, verified_binding):
+    """Availability includes all adjudication/comparison evidence, not just A."""
+    if verified_binding['schema'] == 'materialized-outcome-v2':
+        return datetime.fromisoformat(verified_binding['available_at'])
+    history = historical_from_payload(verified_binding['history'])
+    return max(e.received_at for e in history.evidence)
+
+
 def verify_outcome(outcome, store, *, official_adapter=None):
     require(store is not None and outcome.materialization is not None, 'Missing trusted outcome materialization')
     document = json.loads(store.get(outcome.materialization))
@@ -185,7 +229,7 @@ def verify_outcome(outcome, store, *, official_adapter=None):
                 max((o.evidence for o in history.observations), key=lambda e: e.receipt_key),
                 'Scored votes/evidence differ from historical materialization')
         return document
-    require(document.get('schema') == 'materialized-outcome-v1', 'Unsupported outcome materialization')
+    require(document.get('schema') == 'materialized-outcome-v2', 'Unsupported outcome materialization')
     from .contracts import ArtifactRef
     ref = ArtifactRef(uri=f"sha256:{document['state']}", sha256=document['state'])
     state = from_json(store.get(ref).decode())

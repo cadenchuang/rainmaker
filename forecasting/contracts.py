@@ -809,6 +809,171 @@ class ActivePartition(Contract):
 
 
 @dataclass(frozen=True, kw_only=True)
+class SourceReconciliation(Contract):
+    """Independent authority's exact decision bytes, not producer precedence prose.
+
+    The canonical document must be the raw payload of a selected independent
+    evidence envelope. Source authentication remains the ingestion/evaluator's
+    responsibility; contract labels alone cannot establish official provenance.
+    Existing v2 object fields/encoding are unchanged.
+    """
+    race_definition: RaceRef
+    selected_observation_hashes: tuple[str, ...]
+    excluded_observation_hashes: tuple[str, ...]
+    issued_at: datetime
+    basis: str
+
+    def validate(self):
+        for hashes in (self.selected_observation_hashes, self.excluded_observation_hashes):
+            _nonempty_unique(hashes, 'reconciliation observation hashes')
+            for digest in hashes:
+                _hash(digest)
+        require(bool(self.basis.strip()), 'Independent decision basis required')
+
+
+def count_exclusion_reasons(race, observations, evidence, selected_ids):
+    """Derive applicability and redundancy; never consume caller exclusion labels.
+
+    Redundancy needs matched known snapshots/accounting over identical disjoint
+    cells, or a newer complete encompassing snapshot from the SAME source. Mere
+    overlap, receipt order, matching partial values or source preference is not
+    equivalence. Unprovable overlap requires independent reconciliation.
+    """
+    rows, bases = _materialize_count_history(race, observations)
+    by_id = {o.observation_id:o for o in observations}
+    totals = {r.observation_id:r for r in rows}
+    latest = {(o.coverage,o.evidence.source_id):o.observation_id for o in observations}
+    selected = tuple(by_id[i] for i in selected_ids)
+    validate_partition(race, tuple(o.coverage for o in selected))
+    def current(o):
+        return latest[o.coverage,o.evidence.source_id] == o.observation_id and o.evidence.evidence_id in evidence.selected_ids
+    require(all(current(o) for o in selected), 'Stale active total')
+    active = tuple(o for o in observations if current(o))
+    def cells(o):
+        return coverage_cells(race,o.coverage)
+    def applicable(group):
+        consumed, pending = set(), [o.observation_id for o in group]
+        while pending:
+            oid = pending.pop()
+            if oid in consumed:
+                continue
+            consumed.add(oid)
+            if by_id[oid].evidence.evidence_id not in evidence.selected_ids:
+                return False
+            pending.extend(bases[oid])
+        try:
+            for oid in consumed:
+                validate_count(race,by_id[oid])
+            _materialize_count_history(race, observations, frozenset(evidence.selected_ids), frozenset(consumed))
+        except ValueError:
+            return False
+        return True
+    def summary(group, allow_missing=False):
+        covered = set()
+        for o in group:
+            if o.coverage.method_status == 'UNKNOWN' or covered & cells(o):
+                return None
+            covered |= cells(o)
+        if not group or not applicable(group):
+            return None
+        vectors = [(*totals[o.observation_id].votes,
+            *(getattr(totals[o.observation_id].quantities,f.name) for f in fields(VoteQuantities)
+              if f.name != 'schema_version')) for o in group]
+        # None never becomes zero, nor proof of numerical agreement.
+        values = tuple(None if any(v[i] is None for v in vectors) else sum(v[i] for v in vectors)
+                       for i in range(len(vectors[0])))
+        if not allow_missing and (any(v is None for v in values[:len(race.candidates)]) or any(
+                totals[o.observation_id].quantities.valid_contest_votes is None for o in group)):
+            return None
+        timestamps = {o.source_as_of for o in group}
+        if len(timestamps) != 1 or None in timestamps:
+            return None
+        return covered, values, next(iter(timestamps))
+    def equivalent(left,right):
+        a,b = summary(left),summary(right)
+        if a is None or b is None or a != b:
+            return False
+        if len({o.evidence.origin for o in (*left,*right)}) != 1:
+            return False
+        if len({(o.reporting_status,o.certified) for o in (*left,*right)}) != 1:
+            return False
+        # Reporting-unit percentages cannot be added across different geometries.
+        if len(left) == len(right) == 1 and cells(left[0]) == cells(right[0]):
+            return left[0].completeness == right[0].completeness
+        return all(not o.completeness for o in (*left,*right))
+    reasons = {}
+    for obs in observations:
+        if obs.observation_id in selected_ids:
+            continue
+        if not current(obs):
+            reasons[obs.observation_id] = 'SUPERSEDED'
+            continue
+        overlapping = tuple(o for o in selected if cells(o) & cells(obs))
+        require(bool(overlapping), 'Current nonoverlapping coverage cannot be excluded')
+        inside = tuple(o for o in selected if cells(o) <= cells(obs))
+        redundant = equivalent((obs,),inside)
+        for parent in overlapping:
+            # A complete current county/method partition may corroborate an
+            # encompassing selected total; no totals are independently added.
+            siblings = tuple(o for o in active if o.observation_id not in selected_ids and cells(o) <= cells(parent))
+            if obs in siblings and equivalent(siblings,(parent,)):
+                redundant = True
+            # Explicitly support a publisher's newer complete snapshot replacing
+            # its older partial subset. Cross-source timestamp precedence is not
+            # authorized by this rule.
+            old,new = summary((obs,),allow_missing=True),summary((parent,))
+            if old is not None and new is not None and cells(obs) <= cells(parent) and (
+                    obs.evidence.source_id,obs.evidence.origin) == (parent.evidence.source_id,parent.evidence.origin) and (
+                    parent.reporting_status == 'COMPLETE' and new[2] > old[2] and
+                    (not obs.certified or parent.certified)) and all(
+                    x is None or y is not None and x <= y for x,y in zip(old[1],new[1])):
+                redundant = True
+        reasons[obs.observation_id] = 'OVERLAPPING_REDUNDANT' if redundant else 'SOURCE_CONFLICT'
+    return reasons
+
+
+def validate_count_exclusions(race, observations, evidence, partition):
+    reasons = count_exclusion_reasons(race,observations,evidence,partition.selected_observation_ids)
+    supplied = {e.observation_id:e.reason for e in partition.excluded}
+    require(supplied == reasons, 'Exclusion classification differs from derived source applicability/conflict')
+    conflicts = tuple(o for o in observations if reasons.get(o.observation_id) == 'SOURCE_CONFLICT')
+    if not conflicts:
+        # Legacy explicit coverage choices may retain context refs. They provide
+        # no authority to discard a derived conflict and cannot waive equivalence.
+        require(set(partition.reconciliation_evidence_ids) <= set(evidence.selected_ids),
+                'Reconciliation context evidence unavailable')
+        return None
+    require(partition.precedence == 'EXPLICIT_RECONCILIATION' and bool(partition.reconciliation_evidence_ids),
+            'Multiple current sources require evidenced reconciliation')
+    # A typed raw source decision is a narrow extension using the existing
+    # reconciliation string/evidence refs; no existing v2 fields are added.
+    try:
+        decision = from_json(partition.reconciliation)
+    except (ValueError,TypeError,KeyError) as exc:
+        raise ValueError('Independent source reconciliation document required') from exc
+    require(type(decision) is SourceReconciliation and canonical_json(decision) == partition.reconciliation,
+            'Canonical independent source reconciliation document required')
+    by_id = {o.observation_id:o for o in observations}
+    selected = tuple(by_id[i] for i in partition.selected_observation_ids)
+    require(decision.race_definition == race.ref and decision.selected_observation_hashes ==
+            tuple(content_id(o) for o in selected) and decision.excluded_observation_hashes ==
+            tuple(content_id(o) for o in conflicts), 'Reconciliation does not bind exact current reports')
+    registry = {e.evidence_id:e for e in evidence.catalog}
+    for eid in partition.reconciliation_evidence_ids:
+        require(eid in evidence.selected_ids, 'Reconciliation evidence unavailable')
+        e = registry[eid]
+        require(e.raw_payload.sha256 == content_id(decision) and
+                e.source_kind in ('OFFICIAL_RESULTS','OFFICIAL_RULES') and
+                e.quality in ('VERIFIED_OFFICIAL','SYNTHETIC') and
+                all(e.origin == o.evidence.origin for o in (*selected,*conflicts)) and
+                all((e.source_id,e.source_object_id) != (o.evidence.source_id,o.evidence.source_object_id)
+                    and e.raw_payload != o.evidence.raw_payload for o in observations) and
+                max(o.evidence.received_at for o in (*selected,*conflicts)) <= decision.issued_at <= e.received_at,
+                'Independent applicable reconciliation evidence required')
+    return decision
+
+
+@dataclass(frozen=True, kw_only=True)
 class MaterializedCounts(Contract):
     race_definition: RaceRef
     rows: tuple[MaterializedCount, ...]
@@ -872,8 +1037,7 @@ class CountingState(Contract):
             require(all(r.reporting_status == 'COMPLETE' and all(v is not None for v in r.votes)
                         for r in self.materialized_counts.rows), 'Incomplete counts forbidden by partition')
         require(set(self.partition.reconciliation_evidence_ids) <= set(self.evidence.selected_ids), 'Unknown reconciliation evidence')
-        require(not any(e.reason == 'SOURCE_CONFLICT' for e in self.partition.excluded)
-                or self.partition.precedence == 'EXPLICIT_RECONCILIATION', 'Source conflicts require explicit evidenced reconciliation')
+        validate_count_exclusions(race,self.observations,self.evidence,self.partition)
         selected_coverages = tuple(by_id[i].coverage for i in selected)
         if self.partition.precedence == 'STATE_TOTAL':
             require(all(c.unit_id == f'US:{race.state}' and c.ballot_method == 'ALL' for c in selected_coverages), 'State precedence mismatch')
