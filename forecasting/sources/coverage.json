@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "election_date": "2026-11-03",
+  "receipt_window_utc": [
+    "2026-11-03T12:22:05.790855+00:00",
+    "2026-11-03T12:22:43.932234+00:00"
+  ],
+  "accepted_live_observations": 0,
+  "states_with_accepted_live_results": [],
+  "mn": {
+    "release_status": "TEST_RESULTS",
+    "accepted_for_model_input": false,
+    "county_mapping_count": 87,
+    "county_partition_verified_against": "Census national_county2020.txt joined to OSS Cntytbl.txt by county name",
+    "offices": [
+      {
+        "office": "US_SENATE",
+        "source_office_id": "0102",
+        "raw_test_rows": 435,
+        "raw_test_counties": 87,
+        "test_reporting_units": [
+          "0"
+        ],
+        "accepted_live_counties": 0
+      },
+      {
+        "office": "GOVERNOR",
+        "source_office_id": "0331",
+        "raw_test_rows": 348,
+        "raw_test_counties": 87,
+        "test_reporting_units": [
+          "0"
+        ],
+        "accepted_live_counties": 0
+      }
+    ],
+    "missingness_policy": "No live totals available. Test-file placeholder zeros are quarantined. Unreported units normalize to None only after context is live. Absent units are unavailable."
+  },
+  "limitations": [
+    "No reviewed 2026 RaceDefinition/rules/eligibility roster has been published; identities require review before live acceptance.",
+    "No accepted live vote totals, no forecast-ready count state.",
+    "Minnesota file Last-Modified orders resource editions only; publication and election snapshot instants remain unknown.",
+    "All-precinct reporting does not certify all ballots counted.",
+    "Texas direct HTTP retrieval returned 403; no original Texas result bytes retained.",
+    "Remaining 48 states unresearched, not asserted to have no public results.",
+    "Coverage registry office lists describe ingestion scope, not verified election schedules."
+  ]
+}

@@ -1,0 +1,629 @@
+{
+  "schema_version": 1,
+  "election_date": "2026-11-03",
+  "states": [
+    {
+      "state": "AK",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "AL",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "AR",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "AZ",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "CA",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "CO",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "CT",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "DE",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "FL",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "GA",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "HI",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "IA",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "ID",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "IL",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "IN",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "KS",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "KY",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "LA",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "MA",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "MD",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "ME",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "MI",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "MN",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [
+        "mn-sos-2026"
+      ],
+      "accepted_live_observations": 0,
+      "status": "QUARANTINED_TEST_RELEASE",
+      "county_coverage": "87 mapped; test data only"
+    },
+    {
+      "state": "MO",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "MS",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "MT",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "NC",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "ND",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "NE",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "NH",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "NJ",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "NM",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "NV",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "NY",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "OH",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "OK",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "OR",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "PA",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "RI",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "SC",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "SD",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "TN",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "TX",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [
+        "tx-sos-2026"
+      ],
+      "accepted_live_observations": 0,
+      "status": "DIRECT_FETCH_HTTP_403",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "UT",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "VA",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "VT",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "WA",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "WI",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "WV",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    },
+    {
+      "state": "WY",
+      "offices": [
+        "US_SENATE",
+        "GOVERNOR"
+      ],
+      "event_eligibility": "NOT_YET_VERIFIED",
+      "source_ids": [],
+      "accepted_live_observations": 0,
+      "status": "NOT_RESEARCHED",
+      "county_coverage": "UNAVAILABLE"
+    }
+  ],
+  "sources": [
+    {
+      "source_id": "mn-sos-2026",
+      "authority": "Minnesota Secretary of State",
+      "index_url": "https://electionresults.sos.mn.gov/Select/MediaFiles/Index?ersElectionId=201",
+      "layout_url": "https://electionresults.sos.mn.gov/Results/MediaFileLayout/Index?erselectionId=201",
+      "county_results_url": "https://electionresultsfiles.sos.mn.gov/20261103/allracesbycounty.txt",
+      "senate_county_url": "https://electionresultsfiles.sos.mn.gov/20261103/ussenatecty.txt",
+      "adapter": "forecasting.sources.minnesota",
+      "status": "QUARANTINED_TEST_RELEASE"
+    },
+    {
+      "source_id": "tx-sos-2026",
+      "authority": "Texas Secretary of State",
+      "index_url": "https://electionresults.sos.state.tx.us/results.html",
+      "adapter": null,
+      "status": "DIRECT_FETCH_HTTP_403"
+    }
+  ]
+}

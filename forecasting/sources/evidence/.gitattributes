@@ -1,0 +1,4 @@
+# Preserve authenticated payload and receipt bytes across checkouts.
+* -text
+*.raw -diff
+*.html -diff

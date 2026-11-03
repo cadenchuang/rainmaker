@@ -1,0 +1,209 @@
+Office of the Minnesota Secretary of State (OSS)
+
+2026 State General Election Results
+----------------------------------------------------
+
+ - The filenames given below are part of the URLs on the Election Night Reporting website and used on the ftp site.
+ - The files on OSS web and ftp sites contain ASCII text, separated by semicolons. 
+ - Information in the supporting files is subject to correction and change up until election day.
+ - Election results may change after being reported initially on election night.
+ - Files with precinct-level results will not be available until the morning after election day.
+ - For questions, contact OSS Elections Division at elections.dept@state.mn.us
+
+Last revised 06/03/2026
+
+----------------------------------------------------
+Election Results Files
+----------------------------------------------------
+
+Results are formatted in flat files which have one row for each candidate and question response in each geographic area 
+(statewide, county, district, or precinct, depending on the file).
+
+Election Results (various names)
+
+	State
+	County ID (if applicable)
+	Precinct name (if applicable)
+	Office ID
+	Office Name 
+	District* 
+	Candidate Order Code**
+	Candidate Name (First/Last/Suffix all in one field)
+	Suffix (not used)
+	Incumbent Code (not used)
+	Party Abbreviation***
+	Number of Precincts reporting
+	Total number of precincts voting for the office
+	Votes for Candidate
+	Percentage of Votes for Candidate out of Total Votes for Office
+	Total number of votes for Office in area
+
+*Note: The District field is used for U.S. Representative, State Senate, State Representative, and County Commissioner districts; District Court; school district numbers; municipal FIPS codes; soil and water conservation district codes, and hospital district codes. The District field is not used for statewide offices (U.S. President, U.S. Senate, Governor, Secretary of State, State Auditor, Attorney General, Supreme Court, Court of Appeals), county-wide offices, or city wards. 
+**Note: Code for write-in candidates is 9901
+***Note: All local candidates are non-partisan.
+
+----------------------------------------------------
+
+Precinct Voting Statistics (pctstats.txt)
+
+        State
+        County ID
+        Precinct ID
+        Precinct Name 
+        Has Reported Statistics (1 = yes, 0 = no) 
+        Number of Voters Registered as of 7:00 a.m. Election Day
+        Number of Voters that Registered on Election Day 
+        Number of Signatures on the Polling Place Roster
+        Number of Regular, Military, and Overseas Absentee Ballots 
+        Number of Federal-Only Absentee Ballots
+        Number of President-Only Absentee Ballots 
+        Total Number Voted
+
+----------------------------------------------------
+Supporting Tables for Election
+----------------------------------------------------
+
+Parties (PartyTbl.txt)
+
+	Party Abbreviation
+	Party Name 
+	Party ID 
+
+Note: all local candidates are non-partisan.
+
+----------------------------------------------------
+	
+Counties (CntyTbl.txt)
+
+	County ID
+	County Name
+	Number of precincts
+
+----------------------------------------------------
+
+Precincts (PrctTbl.txt)
+
+	County ID
+	Precinct ID 
+	Precinct Name
+	Congressional District 
+	Legislative District 
+	County Commissioner District 
+	Judicial District 
+	Soil and Water Conservation District 
+	MCD FIPS code*
+	School District number (not used in statewide elections)	
+	
+* FIPS codes for precincts in unorganized territories may vary from Census FIPS codes.
+
+----------------------------------------------------
+  
+Federal, State, and County Candidates (cand.txt)
+
+	Candidate ID (eight characters)
+	Candidate Name (First/Last/Suffix all in one field)
+	Office ID
+	Office Title
+	County ID (88 = statewide race or multi-county race)
+	Party ID
+	Party Abbreviation
+
+----------------------------------------------------
+
+Federal, State, and County Candidates with Contact Information (CandTbl.txt)
+
+	Candidate ID (eight characters) 
+	Candidate Name (First/Last/Suffix all in one field)
+	Office ID
+	Office Title 
+	County ID (88 = statewide or multi-county race)
+	Party ID
+	Party Abbreviation
+	Residence Street Address
+	Residence City
+	Residence State
+	Residence Zip
+	Campaign Address 
+	Campaign City
+	Campaign State
+	Campaign Zip	
+	Campaign Phone
+	Campaign Website
+	Campaign Email
+	Running Mate Website
+	Running Mate Email
+	Running Mate Phone
+	
+Note: Semicolons in address fields have been replaced with the caret (^) character
+
+----------------------------------------------------
+
+Municipal, School, and Hospital District Candidates (LocalCandTbl.txt)
+
+	Candidate ID (thirteen characters) 
+	Candidate Name (First/Last/Suffix all in one field)
+	Office ID
+	Office Title
+	County ID (home county if multi-county race)
+	MCD FIPS Code (if applicable)
+	School District Number (if applicable)
+
+Note: Party is omitted since all local candidates are non-partisan.
+
+----------------------------------------------------
+
+Municipal, School, and Hospital District Candidates with Contact Information (LocalCandDetails.txt)
+
+	Candidate ID (thirteen characters) 
+	Candidate Name (First/Last/Suffix all in one field)
+	Office ID
+	Office Title 
+	County ID (home county if multi-county race)
+	MCD FIPS Code (if applicable)
+	School District Number (if applicable)
+	Residence Street Address
+	Residence City
+	Residence State
+	Residence Zip
+	Campaign Address 
+	Campaign City
+	Campaign State
+	Campaign Zip	
+	Campaign Phone
+	Campaign Website
+	Campaign Email
+
+Note: Party is omitted since all local candidates are non-partisan.
+Note: Semicolons in address fields have been replaced with the caret (^) character
+
+----------------------------------------------------
+
+Ballot Questions (BallotQuestions.txt)
+
+	County ID 
+	Office ID
+	MCD FIPS Code (if applicable)
+	School District Number (if applicable)
+	Question Number
+	Question Title
+	Question Body
+
+Note: Semicolons in Question fields have been replaced with the caret (^) character
+	
+----------------------------------------------------
+
+School Districts (SchoolDistTbl.txt)
+
+	School District Number
+	School District Name
+	County ID 	
+	County Name
+
+----------------------------------------------------
+
+Municipalities (mcdtbl.txt)
+
+	County ID
+	County Name
+	MCD FIPS Code
+	Municipality Name

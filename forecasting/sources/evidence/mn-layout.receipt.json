@@ -1,0 +1,19 @@
+{
+  "url": "https://electionresults.sos.mn.gov/Results/MediaFileLayout/Index?erselectionId=201",
+  "received_at": "2026-11-03T12:22:22.713307+00:00",
+  "headers": {
+    "Content-Type": "text/plain",
+    "Transfer-Encoding": "chunked",
+    "Connection": "close",
+    "Set-Cookie": "__uzma=687988e2-650c-495d-9c62-6a749207e8c5; HttpOnly; path=/; Expires=Tue, 04-May-27 12:22:22 GMT; Max-Age=15724800; SameSite=Lax",
+    "Date": "Tue, 03 Nov 2026 12:22:22 GMT",
+    "X-Frame-Options": "SAMEORIGIN",
+    "X-XSS-Protection": "1; mode=block",
+    "X-Content-Type-Options": "nosniff",
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+    "Referrer-Policy": "no-referrer-when-downgrade",
+    "Expect-CT": "max-age=60; enforce",
+    "Vary": "Accept-Encoding"
+  },
+  "status": 200
+}
